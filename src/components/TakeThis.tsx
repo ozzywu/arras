@@ -35,23 +35,29 @@ export function TakeThis({
   const iframeOk = recipe.ground !== "site" && !customImage;
 
   const copyText = async (which: Copied, text: string) => {
-    const ok = await tryCopyText(text);
-    if (ok) {
-      setDump(null);
-      flash(which);
-      return;
+    flash(which);
+    try {
+      const ok = await tryCopyText(text);
+      if (ok) {
+        setDump(null);
+        return;
+      }
+      setDump({
+        label:
+          which === "agent"
+            ? "Agent prompt"
+            : which === "embed"
+              ? "Iframe embed"
+              : "React snippet",
+        text,
+      });
+      setError("Clipboard blocked in this browser — the text is selected below.");
+      window.setTimeout(() => dumpRef.current?.select(), 0);
+    } catch (err) {
+      setDump({ label: "Copy payload", text });
+      setError(err instanceof Error ? err.message : "Copy failed — text is below.");
+      window.setTimeout(() => dumpRef.current?.select(), 0);
     }
-    setDump({
-      label:
-        which === "agent"
-          ? "Agent prompt"
-          : which === "embed"
-            ? "Iframe embed"
-            : "React snippet",
-      text,
-    });
-    setError("Clipboard blocked in this browser — the text is selected below.");
-    window.setTimeout(() => dumpRef.current?.select(), 0);
   };
 
   const copyPng = async () => {
@@ -197,10 +203,14 @@ function MiniButton({
 }
 
 async function tryCopyText(text: string): Promise<boolean> {
-  const api = navigator.clipboard?.writeText?.(text);
-  if (api) {
-    const copied = await race(api.then(() => true), 900);
-    if (copied) return true;
+  try {
+    const api = navigator.clipboard?.writeText?.(text);
+    if (api) {
+      const copied = await race(api.then(() => true), 900);
+      if (copied) return true;
+    }
+  } catch {
+    // NotAllowedError is often thrown synchronously when the tab is unfocused.
   }
   try {
     const ta = document.createElement("textarea");
