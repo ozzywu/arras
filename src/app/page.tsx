@@ -1,5 +1,5 @@
-import YarnStudio from "@/components/YarnStudio";
+import AtelierApp from "@/components/AtelierApp";
 
 export default function HomePage() {
-  return <YarnStudio />;
+  return <AtelierApp />;
 }

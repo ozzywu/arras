@@ -49,3 +49,16 @@ body {
   background-attachment: fixed;
   background-size: 192px 192px;
 }
+
+[data-atelier="screen"] {
+  --linen: #100e0c;
+  --umber: #e6d3a4;
+  --dust: #c4b089;
+  --flax: #9a8460;
+  --cream: #f6e6c8;
+}
+
+[data-atelier="screen"] ::selection {
+  background: #8f2e2a;
+  color: #f6e6c8;
+}

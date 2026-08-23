@@ -83,9 +83,18 @@ export default function YarnStudio() {
   const playingRef = useRef(false);
   const tRef = useRef(0);
   const lastTs = useRef<number | null>(null);
+  const reduceMotionRef = useRef(false);
 
-  playingRef.current = playing;
-  tRef.current = t;
+  useEffect(() => {
+    reduceMotionRef.current = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+  }, []);
+
+  useEffect(() => {
+    playingRef.current = playing;
+    tRef.current = t;
+  });
 
   const pad = frayPad(params.fray, params.ground);
   const siteGround = params.ground === "site";
@@ -127,7 +136,12 @@ export default function YarnStudio() {
       setAnalysisSize({ w: painted.canvas.width, h: painted.canvas.height });
       setStitches(built);
       setBusy(false);
-      setPlaying(true);
+      if (reduceMotionRef.current) {
+        setPlaying(false);
+        setT(1);
+      } else {
+        setPlaying(true);
+      }
     };
     void run();
     return () => {
@@ -290,14 +304,6 @@ export default function YarnStudio() {
     });
     setSource("image");
   };
-
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reduce.matches) {
-      setPlaying(false);
-      setT(1);
-    }
-  }, [stitches]);
 
   const patch = <K extends keyof LoomParams>(key: K, value: LoomParams[K]) => {
     setParams((p) => ({ ...p, [key]: value }));

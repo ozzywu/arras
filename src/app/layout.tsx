@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Inter, Space_Mono } from "next/font/google";
-import { ArrasShell } from "@/components/ArrasShell";
 import "./globals.css";
 
 const inter = Inter({
@@ -23,9 +22,9 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Arras — Modern interpretation of medieval tapestry",
+  title: "Arras — Yarn tapestry and Coromandel screen",
   description:
-    "Drop a photo. It gets woven into the cloth. A public image-to-tapestry studio — no account.",
+    "Drop a photo. Weave it into linen, or inlay it onto a folding screen. A public image-to-art studio — no account.",
 };
 
 export default function RootLayout({
@@ -38,7 +37,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${cormorant.variable} ${spaceMono.variable} antialiased`}
       >
-        <ArrasShell>{children}</ArrasShell>
+        {children}
       </body>
     </html>
   );

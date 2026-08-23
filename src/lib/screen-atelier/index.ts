@@ -1,14 +1,10 @@
-import { analyzeImageData } from "./analyze";
-import { applyFray } from "./fray";
-import { generateStitches } from "./generate";
-import { paintCourtyard } from "./paint-demo";
-import { assignBirths } from "./timeline";
-import type { Analysis, LoomParams, Stitch } from "./types";
+import { analyzeImageData } from "@/lib/yarn-loom/analyze";
+import { paintCourtyard } from "@/lib/yarn-loom/paint-demo";
+import type { Analysis } from "@/lib/yarn-loom/types";
+import { buildPanel } from "./generate";
+import type { Mark, ScreenParams } from "./types";
 
-export function analysisCanvas(
-  width: number,
-  height: number,
-): HTMLCanvasElement {
+export function analysisCanvas(width: number, height: number): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = width;
   c.height = height;
@@ -17,7 +13,7 @@ export function analysisCanvas(
 
 export function paintSourceFromImage(
   image: CanvasImageSource,
-  maxW = 400,
+  maxW = 380,
 ): { canvas: HTMLCanvasElement; analysis: Analysis } {
   const iw =
     "naturalWidth" in image && typeof image.naturalWidth === "number"
@@ -36,7 +32,7 @@ export function paintSourceFromImage(
   return { canvas, analysis: analyzeImageData(ctx.getImageData(0, 0, w, h)) };
 }
 
-export function paintDemoSource(maxW = 420): {
+export function paintDemoSource(maxW = 400): {
   canvas: HTMLCanvasElement;
   analysis: Analysis;
 } {
@@ -48,35 +44,12 @@ export function paintDemoSource(maxW = 420): {
   return { canvas, analysis: analyzeImageData(ctx.getImageData(0, 0, w, h)) };
 }
 
-export function buildEmbroidery(
-  analysis: Analysis,
-  params: LoomParams,
-): Stitch[] {
-  const stitches = generateStitches(analysis, {
-    density: params.density,
-    stitchLength: params.stitchLength,
-    colorMode: params.colorMode,
-    seed: params.seed,
-    seat: params.ground === "hessian" ? "hessian" : "linen",
-  });
-  const finished = applyFray(
-    stitches,
-    analysis.width,
-    analysis.height,
-    params.fray,
-    params.seed,
-  );
-  return assignBirths(
-    finished,
-    params.growth,
-    analysis.width,
-    analysis.height,
-  );
+export function buildScreen(analysis: Analysis, params: ScreenParams): Mark[] {
+  return buildPanel(analysis, params);
 }
 
-export { paintCloth, linenPatternUrl, linenBackgroundStyle } from "./cloth";
-export { frayPad, applyFray } from "./fray";
-export type { GroundMode, LoomParams, Stitch } from "./types";
-export { playheadEase } from "./timeline";
-export { renderStitches, drawNeedle, drawMotes } from "./render";
-export type { Needle } from "./render";
+export { paintPanelGround, paintPanelFrame, renderMarks, drawBrush } from "./render";
+export { screenPlayheadEase, markProgress } from "./timeline";
+export { lacquerBackgroundStyle } from "./ground";
+export type { Mark, ScreenParams } from "./types";
+export { DEFAULT_SCREEN_PARAMS } from "./types";

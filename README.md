@@ -1,8 +1,8 @@
 # Arras
 
-A modern interpretation of medieval tapestry.
+A library of handmade image styles: medieval tapestry, and Coromandel / gongbi screen work.
 
-Drop a photo. It is sampled into satin stitches and woven onto linen in the browser — no account, no server-side image upload.
+Drop a photo. Yarn samples it into satin stitches on linen. Screen inlays it as mineral washes and ink on lacquer, gold, or silk. Everything runs in the browser — no account, no server-side image upload.
 
 ## Run locally
 
@@ -28,6 +28,8 @@ Import this GitHub repo in [Vercel](https://vercel.com/new). No environment vari
 
 ## What it does
 
-The hoop reads an image, scores subject vs ground, and lays satin stitches. Growth modes (colonize, sew, weave, bloom) decide the order the needle travels. Ground can be the page weave, a linen patch, or hessian. Edges run from a tight hem to an unravelled fray.
+**Yarn** reads an image, scores subject vs ground, and lays satin stitches. Growth modes (colonize, sew, weave, bloom) decide the order the needle travels. Ground can be the page weave, a linen patch, or hessian. Edges run from a tight hem to an unravelled fray.
+
+**Screen** quantizes the same photo into a museum-aged mineral palette, seats pale ground onto lacquer / gold leaf / silk / parchment, and draws calligraphic contours. Knobs cover outline, wetness, gold leaf, aging, flatten, filigree pattern, craquelure, frame, and ink mode (gongbi, xieyi, engraved).
 
 Everything runs in the client. Your photo never leaves the tab.
