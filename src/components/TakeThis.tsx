@@ -82,8 +82,8 @@ export function TakeThis({
 
   return (
     <section
-      className="flex flex-col gap-2 pt-3"
-      style={{ borderTop: "1px solid rgba(140,90,50,0.18)" }}
+      className="flex flex-col gap-2 pb-3"
+      style={{ borderBottom: "1px solid rgba(140,90,50,0.18)" }}
     >
       <div
         className="text-[11px] tracking-[0.18em] uppercase"

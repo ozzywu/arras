@@ -148,6 +148,12 @@ export default function YarnStudio() {
           border: "1px solid rgba(140,90,50,0.18)",
         }}
       >
+        <TakeThis
+          recipe={recipe}
+          hoopRef={hoopRef}
+          customImage={source === "image" && !!imageUrl?.startsWith("blob:")}
+        />
+
         <section>
           <Label>Source</Label>
           <div className="flex flex-wrap gap-2 mt-2">
@@ -374,12 +380,6 @@ export default function YarnStudio() {
         >
           Re-thread with a new seed
         </button>
-
-        <TakeThis
-          recipe={recipe}
-          hoopRef={hoopRef}
-          customImage={source === "image" && !!imageUrl?.startsWith("blob:")}
-        />
       </aside>
     </div>
   );
