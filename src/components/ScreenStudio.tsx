@@ -61,6 +61,7 @@ const REVEALS: { id: RevealMode; label: string; hint: string }[] = [
 export default function ScreenStudio() {
   const hoopRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<HTMLCanvasElement>(null);
+  const washRef = useRef<HTMLCanvasElement>(null);
   const settleRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<HTMLCanvasElement>(null);
@@ -70,6 +71,7 @@ export default function ScreenStudio() {
   const [source, setSource] = useState<SourceKind>("plant");
   const [imageUrl, setImageUrl] = useState<string | null>("/plant.png");
   const [marks, setMarks] = useState<Mark[]>([]);
+  const [wash, setWash] = useState<ImageData | null>(null);
   const [analysisSize, setAnalysisSize] = useState({ w: 340, h: 415 });
   const [busy, setBusy] = useState(true);
   const [playing, setPlaying] = useState(false);
@@ -80,6 +82,7 @@ export default function ScreenStudio() {
   const tRef = useRef(0);
   const lastTs = useRef<number | null>(null);
   const reduceMotionRef = useRef(false);
+  const washBmpRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -91,6 +94,18 @@ export default function ScreenStudio() {
       "(prefers-reduced-motion: reduce)",
     ).matches;
   }, []);
+
+  useEffect(() => {
+    if (!wash) {
+      washBmpRef.current = null;
+      return;
+    }
+    const c = document.createElement("canvas");
+    c.width = wash.width;
+    c.height = wash.height;
+    c.getContext("2d")!.putImageData(wash, 0, 0);
+    washBmpRef.current = c;
+  }, [wash]);
 
   const genKey = [
     source,
@@ -128,7 +143,8 @@ export default function ScreenStudio() {
       if (cancelled) return;
       const built = buildScreen(painted.analysis, params);
       setAnalysisSize({ w: painted.canvas.width, h: painted.canvas.height });
-      setMarks(built);
+      setMarks(built.marks);
+      setWash(built.wash);
       setBusy(false);
       if (reduceMotionRef.current) {
         setPlaying(false);
@@ -187,6 +203,7 @@ export default function ScreenStudio() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     for (const canvas of [
       groundRef.current,
+      washRef.current,
       settleRef.current,
       liveRef.current,
       frameRef.current,
@@ -225,6 +242,27 @@ export default function ScreenStudio() {
   }, [marks, params.wetness]);
 
   useEffect(() => {
+    const washCanvas = washRef.current;
+    if (washCanvas && size.w > 0) {
+      const wctx = washCanvas.getContext("2d")!;
+      wctx.clearRect(0, 0, size.w, size.h);
+      if (wash) {
+        const eased = screenPlayheadEase(t);
+        const washT =
+          params.reveal === "ink-first"
+            ? Math.max(0, (eased - 0.32) / 0.5)
+            : params.reveal === "bloom"
+              ? Math.min(1, eased / 0.55)
+              : Math.min(1, eased / 0.42);
+        if (washT > 0.01 && washBmpRef.current) {
+          wctx.globalAlpha = washT;
+          wctx.imageSmoothingEnabled = true;
+          wctx.drawImage(washBmpRef.current, 0, 0, size.w, size.h);
+          wctx.globalAlpha = 1;
+        }
+      }
+    }
+
     const settled = settleRef.current;
     const live = liveRef.current;
     if (!settled || !live || size.w === 0) return;
@@ -294,10 +332,12 @@ export default function ScreenStudio() {
     analysisSize.h,
     analysisSize.w,
     marks,
+    params.reveal,
     params.wetness,
     size.h,
     size.w,
     t,
+    wash,
   ]);
 
   const onFiles = (files: FileList | null) => {
@@ -361,6 +401,7 @@ export default function ScreenStudio() {
             }}
           >
             <canvas ref={groundRef} className="absolute inset-0 h-full w-full" />
+            <canvas ref={washRef} className="absolute inset-0 h-full w-full" />
             <canvas ref={settleRef} className="absolute inset-0 h-full w-full" />
             <canvas ref={liveRef} className="absolute inset-0 h-full w-full" />
             <canvas ref={frameRef} className="absolute inset-0 h-full w-full" />
@@ -629,8 +670,8 @@ export default function ScreenStudio() {
           className="text-xs tabular-nums"
           style={{ fontFamily: "var(--font-space-mono)", color: "#9a8460" }}
         >
-          {counts.ink.toLocaleString()} strokes · {counts.wash.toLocaleString()}{" "}
-          washes
+          {counts.ink.toLocaleString()} strokes
+          {wash ? " · mineral wash" : ""}
           {busy ? " · grinding" : ""}
         </p>
 

@@ -1,5 +1,5 @@
 import { sampleAngle, sampleMag } from "@/lib/yarn-loom/analyze";
-import { mixRgb, rgbAt, saturate } from "@/lib/yarn-loom/color";
+import { mixRgb, rgbAt } from "@/lib/yarn-loom/color";
 import { createRng } from "@/lib/yarn-loom/rng";
 import { subjectScore } from "@/lib/yarn-loom/subject";
 import type { Analysis, Rgb } from "@/lib/yarn-loom/types";
@@ -11,7 +11,7 @@ import {
 } from "./palette";
 import { quantizeAnalysis } from "./quantize";
 import { assignMarkBirths } from "./timeline";
-import type { Mark, ScreenParams } from "./types";
+import type { Mark, ScreenBuild, ScreenParams } from "./types";
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -72,30 +72,97 @@ function readResolved(
   return { color, subject: sub, sampled };
 }
 
-function pushWash(
-  marks: Mark[],
+function isRidge(
+  mag: Float32Array,
   x: number,
   y: number,
-  color: Rgb,
-  subject: number,
-  radius: number,
+  w: number,
   angle: number,
-  wetness: number,
-): void {
-  const rx = radius * (1 + wetness * 0.35);
-  marks.push({
-    kind: "wash",
-    x0: x,
-    y0: y,
-    x1: x + Math.cos(angle) * rx,
-    y1: y + Math.sin(angle) * rx,
-    color,
-    width: rx,
-    opacity: 0.42 + (1 - wetness) * 0.4,
-    subject,
-    birth: 0,
-    grow: 0.02,
-  });
+): boolean {
+  const m = mag[y * w + x];
+  const nx = Math.round(Math.cos(angle + Math.PI / 2));
+  const ny = Math.round(Math.sin(angle + Math.PI / 2));
+  const a = mag[(y + ny) * w + (x + nx)] ?? 0;
+  const b = mag[(y - ny) * w + (x - nx)] ?? 0;
+  return m >= a && m >= b;
+}
+
+function blurImageData(image: ImageData, radius: number): ImageData {
+  if (radius < 0.6) return image;
+  const { width: w, height: h, data } = image;
+  const out = new Uint8ClampedArray(data.length);
+  const r = Math.max(1, Math.round(radius));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sr = 0;
+      let sg = 0;
+      let sb = 0;
+      let sa = 0;
+      let n = 0;
+      for (let j = -r; j <= r; j++) {
+        const yy = y + j;
+        if (yy < 0 || yy >= h) continue;
+        for (let i = -r; i <= r; i++) {
+          const xx = x + i;
+          if (xx < 0 || xx >= w) continue;
+          const k = (yy * w + xx) * 4;
+          sr += data[k];
+          sg += data[k + 1];
+          sb += data[k + 2];
+          sa += data[k + 3];
+          n++;
+        }
+      }
+      const o = (y * w + x) * 4;
+      out[o] = sr / n;
+      out[o + 1] = sg / n;
+      out[o + 2] = sb / n;
+      out[o + 3] = sa / n;
+    }
+  }
+  return new ImageData(out, w, h);
+}
+
+function buildWashImage(
+  analysis: Analysis,
+  subject: Float32Array,
+  quantColors: Rgb[],
+  quantIndex: Uint16Array,
+  params: ScreenParams,
+  lineart: boolean,
+  darkBg: boolean,
+): ImageData {
+  const { width: w, height: h } = analysis;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const resolved = readResolved(
+        analysis,
+        subject,
+        quantColors,
+        quantIndex,
+        params,
+        x,
+        y,
+      );
+      const i = (y * w + x) * 4;
+      if (lineart && darkBg) {
+        data[i + 3] = 0;
+        continue;
+      }
+      const keep = clamp((resolved.subject - 0.1) / 0.38, 0, 1);
+      if (keep < 0.04) {
+        data[i + 3] = 0;
+        continue;
+      }
+      const chalk = 1 - params.wetness * 0.25;
+      data[i] = resolved.color.r * chalk + 18 * (1 - chalk);
+      data[i + 1] = resolved.color.g * chalk + 16 * (1 - chalk);
+      data[i + 2] = resolved.color.b * chalk + 14 * (1 - chalk);
+      data[i + 3] = Math.round((0.55 + (1 - params.wetness) * 0.38) * keep * 255);
+    }
+  }
+  return blurImageData(new ImageData(data, w, h), 0.6 + params.wetness * 1.8);
 }
 
 function tryMarkOcc(
@@ -136,9 +203,9 @@ function tryMarkOcc(
 }
 
 /**
- * Build wash dabs, ink contours, interior veins, and filigree from an analysis.
+ * Build a mineral wash field plus sparse ink contours, veins, and filigree.
  */
-export function buildPanel(analysis: Analysis, params: ScreenParams): Mark[] {
+export function buildPanel(analysis: Analysis, params: ScreenParams): ScreenBuild {
   const rng = createRng(params.seed);
   const { width: w, height: h, mag, lum } = analysis;
   const n = w * h;
@@ -181,62 +248,33 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): Mark[] {
   for (let i = 0; i < n; i++) if (mag[i] > maxMag) maxMag = mag[i];
 
   const marks: Mark[] = [];
+  const wash = buildWashImage(
+    analysis,
+    subject,
+    quantColors,
+    quantIndex,
+    params,
+    lineart,
+    darkBg,
+  );
 
-  const washCell = 3.4 + params.flatten * 5.2 + params.wetness * 1.4;
-  const washStride = Math.max(2, Math.round(washCell * 0.82));
-  const inkBias = params.ink === "xieyi" ? 1.35 : params.ink === "engraved" ? 0.82 : 1;
-  if (!lineart || !darkBg) {
-    for (let y = 3; y < h - 3; y += washStride) {
-      for (let x = 3; x < w - 3; x += washStride) {
-        const jx = clamp(x + ((rng() - 0.5) * washStride) | 0, 2, w - 3);
-        const jy = clamp(y + ((rng() - 0.5) * washStride) | 0, 2, h - 3);
-        const resolved = readResolved(
-          analysis,
-          subject,
-          quantColors,
-          quantIndex,
-          params,
-          jx,
-          jy,
-        );
-        if (resolved.subject < 0.16 + params.flatten * 0.1 && params.ground !== "gold") {
-          if (rng() > 0.08) continue;
-        }
-        if (lineart && resolved.subject < 0.28 && rng() > 0.12) continue;
-        const ang = sampleAngle(analysis, jx, jy) + (rng() - 0.5) * 0.4;
-        const radius = washCell * (0.55 + rng() * 0.55) * inkBias;
-        const washColor = saturate(resolved.color, 0.92 - params.aging * 0.15);
-        pushWash(
-          marks,
-          jx + 0.5,
-          jy + 0.5,
-          washColor,
-          resolved.subject,
-          radius,
-          ang,
-          params.wetness,
-        );
-      }
-    }
-  }
-
-  const occCell = Math.max(1.15, 2.4 - params.outline * 0.45);
+  const occCell = Math.max(2.6, 4.4 - params.outline * 0.7);
   const occW = Math.ceil(w / occCell);
   const occH = Math.ceil(h / occCell);
   const occ = new Uint8Array(occW * occH);
-  const occLimit = params.ink === "engraved" ? 3 : 2;
+  const occLimit = params.ink === "engraved" ? 2 : 1;
 
   const magGate =
     maxMag *
     (params.ink === "xieyi"
-      ? 0.16
+      ? 0.22
       : params.ink === "engraved"
-        ? 0.07
-        : 0.1) *
-    (1.15 - params.outline * 0.22);
-  const contourStride = Math.max(1, Math.round(3.2 - params.outline * 0.8));
+        ? 0.12
+        : 0.16) *
+    (1.2 - params.outline * 0.18);
+  const contourStride = Math.max(2, Math.round(5.2 - params.outline * 1.1));
   const contourLen =
-    (params.ink === "engraved" ? 7.2 : 9.4) * (0.85 + params.outline * 0.12);
+    (params.ink === "engraved" ? 10 : 13) * (0.85 + params.outline * 0.12);
 
   const inkW =
     (params.ink === "engraved" ? 1.55 : params.ink === "xieyi" ? 0.95 : 1.12) *
@@ -335,27 +373,28 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): Mark[] {
       const jy = clamp(y + ((rng() - 0.5) * contourStride) | 0, 2, h - 3);
       const m = mag[jy * w + jx];
       if (m < magGate) continue;
+      if (!isRidge(mag, jx, jy, w, sampleAngle(analysis, jx, jy))) continue;
       if (occ[occupancyIndex(jx, jy, occW, occCell, occ.length)] >= occLimit) {
         continue;
       }
       const importance = m / maxMag + subject[jy * w + jx] * 0.25;
-      if (importance < 0.12 && rng() > 0.35) continue;
+      if (importance < 0.18 && rng() > 0.25) continue;
       traceKind(
         jx + 0.5,
         jy + 0.5,
         "contour",
         magGate * 0.55,
-        36 + Math.round(params.outline * 18),
+        48 + Math.round(params.outline * 22),
         contourLen,
         inkW,
-        params.ink === "xieyi" ? 0.72 : 0.9,
+        params.ink === "xieyi" ? 0.72 : 0.92,
       );
     }
   }
 
-  const veinStride = Math.max(2, Math.round(4.6 - params.flatten * 1.4));
-  const veinGate = maxMag * (0.035 + (1 - params.flatten) * 0.03);
-  if (params.ink !== "xieyi" || params.wetness < 0.7) {
+  const veinStride = Math.max(4, Math.round(7.5 - params.flatten * 2.2));
+  const veinGate = maxMag * (0.06 + (1 - params.flatten) * 0.04);
+  if ((params.ink === "engraved" || params.flatten > 0.55) && !lineart) {
     for (let y = 4; y < h - 4; y += veinStride) {
       for (let x = 4; x < w - 4; x += veinStride) {
         const jx = clamp(x + ((rng() - 0.5) * veinStride) | 0, 3, w - 4);
@@ -426,9 +465,12 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): Mark[] {
     }
   }
 
-  const cap = 42000;
+  const cap = 18000;
   const trimmed = marks.length > cap ? marks.slice(0, cap) : marks;
-  return assignMarkBirths(trimmed, params.reveal, w, h);
+  return {
+    marks: assignMarkBirths(trimmed, params.reveal, w, h),
+    wash,
+  };
 }
 
 function cloudComma(

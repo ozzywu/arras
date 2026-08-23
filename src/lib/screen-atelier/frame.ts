@@ -14,14 +14,7 @@ function aperturePath(
     const cy = height * 0.5;
     const rx = width * 0.42;
     const ry = height * 0.4;
-    const scallops = 28;
-    ctx.moveTo(cx + rx, cy);
-    for (let i = 1; i <= scallops; i++) {
-      const t = (i / scallops) * TAU;
-      const pulse = 1 + Math.sin(t * 8) * 0.018;
-      ctx.lineTo(cx + Math.cos(t) * rx * pulse, cy + Math.sin(t) * ry * pulse);
-    }
-    ctx.closePath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
     return;
   }
 
@@ -54,11 +47,29 @@ export function paintFrameOverlay(
   ctx.beginPath();
   aperturePath(ctx, width, height, params.frame);
   if (params.frame === "oval") {
-    ctx.strokeStyle = "rgba(214, 176, 96, 0.85)";
-    ctx.lineWidth = Math.max(2.2, Math.min(width, height) * 0.012);
+    const cx = width * 0.5;
+    const cy = height * 0.5;
+    const rx = width * 0.42;
+    const ry = height * 0.4;
+    ctx.strokeStyle = "rgba(214, 176, 96, 0.88)";
+    ctx.lineWidth = Math.max(2.4, Math.min(width, height) * 0.013);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(40, 28, 16, 0.55)";
+    ctx.beginPath();
+    const scallops = 72;
+    for (let i = 0; i <= scallops; i++) {
+      const t = (i / scallops) * TAU;
+      const pulse = 1 + Math.sin(t * 10) * 0.012;
+      const x = cx + Math.cos(t) * rx * pulse;
+      const y = cy + Math.sin(t) * ry * pulse;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = "rgba(236, 210, 140, 0.45)";
     ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(40, 28, 16, 0.4)";
+    ctx.lineWidth = 0.8;
     ctx.stroke();
   } else {
     paintSteppedBand(ctx, width, height);

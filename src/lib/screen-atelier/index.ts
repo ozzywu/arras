@@ -2,7 +2,7 @@ import { analyzeImageData } from "@/lib/yarn-loom/analyze";
 import { paintCourtyard } from "@/lib/yarn-loom/paint-demo";
 import type { Analysis } from "@/lib/yarn-loom/types";
 import { buildPanel } from "./generate";
-import type { Mark, ScreenParams } from "./types";
+import type { ScreenBuild, ScreenParams } from "./types";
 
 export function analysisCanvas(width: number, height: number): HTMLCanvasElement {
   const c = document.createElement("canvas");
@@ -44,12 +44,15 @@ export function paintDemoSource(maxW = 400): {
   return { canvas, analysis: analyzeImageData(ctx.getImageData(0, 0, w, h)) };
 }
 
-export function buildScreen(analysis: Analysis, params: ScreenParams): Mark[] {
+export function buildScreen(
+  analysis: Analysis,
+  params: ScreenParams,
+): ScreenBuild {
   return buildPanel(analysis, params);
 }
 
 export { paintPanelGround, paintPanelFrame, renderMarks, drawBrush } from "./render";
 export { screenPlayheadEase, markProgress } from "./timeline";
 export { lacquerBackgroundStyle } from "./ground";
-export type { Mark, ScreenParams } from "./types";
+export type { Mark, ScreenBuild, ScreenParams } from "./types";
 export { DEFAULT_SCREEN_PARAMS } from "./types";

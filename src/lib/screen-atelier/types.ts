@@ -6,6 +6,11 @@ export type InkMode = "gongbi" | "xieyi" | "engraved";
 export type RevealMode = "wash-first" | "ink-first" | "bloom";
 export type MarkKind = "wash" | "contour" | "vein" | "filigree";
 
+export interface ScreenBuild {
+  marks: Mark[];
+  wash: ImageData;
+}
+
 export interface Mark {
   kind: MarkKind;
   x0: number;
@@ -46,10 +51,10 @@ export interface ScreenParams {
 export const DEFAULT_SCREEN_PARAMS: ScreenParams = {
   outline: 1.15,
   wetness: 0.42,
-  goldLeaf: 0.55,
+  goldLeaf: 0.42,
   aging: 0.62,
-  flatten: 0.58,
-  pattern: 0.28,
+  flatten: 0.66,
+  pattern: 0.22,
   craquelure: 0.4,
   ground: "lacquer",
   frame: "oval",
