@@ -11,6 +11,11 @@ export interface RenderFrame {
   scaleY: number;
   originX?: number;
   originY?: number;
+  /**
+   * 1 at the 620px hoop. Stitch endpoints already follow scaleX/Y; floss
+   * width and highlight offsets must too, or a phone hoop looks like rope.
+   */
+  visualScale?: number;
 }
 
 export interface Needle {
@@ -30,10 +35,12 @@ function drawStitch(
   sy: number,
   ox: number,
   oy: number,
+  visualScale: number,
 ): void {
   if (p <= 0.001) return;
   const weight = s.weight ?? 1;
-  const floss = thickness * weight;
+  const vs = visualScale;
+  const floss = thickness * weight * vs;
   const x0 = (s.x0 + ox) * sx;
   const y0 = (s.y0 + oy) * sy;
   const x1 = x0 + (s.x1 - s.x0) * sx * p;
@@ -49,10 +56,10 @@ function drawStitch(
   ctx.lineJoin = "round";
 
   ctx.strokeStyle = "rgba(40, 28, 16, 0.32)";
-  ctx.lineWidth = floss + 0.7 * weight;
+  ctx.lineWidth = floss + 0.7 * weight * vs;
   ctx.beginPath();
-  ctx.moveTo(x0 + lx * 0.55, y0 + ly * 0.7);
-  ctx.lineTo(x1 + lx * 0.55, y1 + ly * 0.7);
+  ctx.moveTo(x0 + lx * 0.55 * vs, y0 + ly * 0.7 * vs);
+  ctx.lineTo(x1 + lx * 0.55 * vs, y1 + ly * 0.7 * vs);
   ctx.stroke();
 
   ctx.strokeStyle = cssRgb(darken(s.color, 0.18));
@@ -63,18 +70,18 @@ function drawStitch(
   ctx.stroke();
 
   ctx.strokeStyle = cssRgb(s.color);
-  ctx.lineWidth = Math.max(0.45, floss * 0.72);
+  ctx.lineWidth = Math.max(0.45 * vs, floss * 0.72);
   ctx.beginPath();
-  ctx.moveTo(x0 - nx * 0.25, y0 - ny * 0.25);
-  ctx.lineTo(x1 - nx * 0.25, y1 - ny * 0.25);
+  ctx.moveTo(x0 - nx * 0.25 * vs, y0 - ny * 0.25 * vs);
+  ctx.lineTo(x1 - nx * 0.25 * vs, y1 - ny * 0.25 * vs);
   ctx.stroke();
 
   if (facing > 0.05 && weight > 0.45) {
     ctx.strokeStyle = cssRgb(lighten(s.color, 0.45), 0.55 + facing * 0.3);
-    ctx.lineWidth = Math.max(0.35, floss * 0.28);
+    ctx.lineWidth = Math.max(0.35 * vs, floss * 0.28);
     ctx.beginPath();
-    ctx.moveTo(x0 - nx * 0.45, y0 - ny * 0.45);
-    ctx.lineTo(x1 - nx * 0.45, y1 - ny * 0.45);
+    ctx.moveTo(x0 - nx * 0.45 * vs, y0 - ny * 0.45 * vs);
+    ctx.lineTo(x1 - nx * 0.45 * vs, y1 - ny * 0.45 * vs);
     ctx.stroke();
   }
 }
@@ -100,10 +107,22 @@ export function renderStitches(
   const { stitches, t, thickness, lightAngle, scaleX, scaleY } = frame;
   const ox = frame.originX ?? 0;
   const oy = frame.originY ?? 0;
+  const visualScale = frame.visualScale ?? 1;
   for (const s of stitches) {
     const p = stitchProgress(s, t);
     if (p <= 0) continue;
-    drawStitch(ctx, s, p, thickness, lightAngle, scaleX, scaleY, ox, oy);
+    drawStitch(
+      ctx,
+      s,
+      p,
+      thickness,
+      lightAngle,
+      scaleX,
+      scaleY,
+      ox,
+      oy,
+      visualScale,
+    );
   }
   return collectNeedles(stitches, t);
 }
@@ -115,6 +134,7 @@ export function drawNeedle(
   scaleY: number,
   originX = 0,
   originY = 0,
+  visualScale = 1,
 ): void {
   const x = (needle.x + originX) * scaleX;
   const y = (needle.y + originY) * scaleY;
@@ -122,6 +142,7 @@ export function drawNeedle(
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(ang);
+  ctx.scale(visualScale, visualScale);
   ctx.fillStyle = "#c5cdd6";
   ctx.strokeStyle = "rgba(40,40,50,0.45)";
   ctx.lineWidth = 0.6;

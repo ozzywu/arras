@@ -46,6 +46,11 @@ body {
   background-color: #f3efe6;
   background-image: url("/textures/linen.svg");
   background-repeat: repeat;
-  background-attachment: fixed;
   background-size: 192px 192px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bg-linen {
+    background-attachment: fixed;
+  }
 }
