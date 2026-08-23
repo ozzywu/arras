@@ -281,7 +281,6 @@ export function linenBackgroundStyle(): CSSProperties {
     backgroundColor: LINEN.base,
     backgroundImage: `url("${linenPatternUrl()}")`,
     backgroundRepeat: "repeat",
-    backgroundAttachment: "fixed",
     backgroundSize: `${LINEN_TILE_SIZE}px ${LINEN_TILE_SIZE}px`,
   };
 }
