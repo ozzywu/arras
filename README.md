@@ -4,6 +4,15 @@ A modern interpretation of medieval tapestry.
 
 Drop a photo. It is sampled into satin stitches and woven onto linen in the browser — no account, no server-side image upload.
 
+When a hoop looks right, **Take this** in the studio copies it onto a website:
+
+- **Copy for agent** — a prompt you paste into Cursor on your site repo. It includes the exact recipe (density, growth, ground, seed, …) and tells the agent to copy `src/lib/yarn-loom` plus `YarnHoop`.
+- **Embed** — an iframe of `/embed?…` that plays the same recipe on Arras. Works for presets on a linen or hessian patch. Site fabric and local uploads need the agent path (stitches have to live *in* your page, and blob URLs do not travel).
+- **React** — a `<YarnHoop recipe={…} />` snippet.
+- **Save PNG** — a still of the hoop. Downloads on a computer. On a phone, the share sheet’s Save Image goes to the camera roll. Site fabric is flattened onto linen so the photo is not a transparent hole.
+
+The studio URL also stores the recipe, so you can bookmark or share a look.
+
 ## Run locally
 
 ```bash

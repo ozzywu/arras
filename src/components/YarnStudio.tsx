@@ -1,42 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
-  birthWindow,
-  buildEmbroidery,
-  collectPackedNeedles,
-  completeBound,
-  drawMotes,
-  drawNeedle,
-  drawPackedStitch,
-  frayPad,
-  LoomClient,
-  packStitches,
-  packedProgress,
-  paintCloth,
-  paintDemoSource,
-  paintSourceFromImage,
-  playheadEase,
-  type PackedStitches,
-  type WeaveParams,
+  imageUrlOf,
+  loomParamsOf,
+  parseRecipe,
+  recipeOf,
+  recipeToQuery,
+  SOURCE_PRESETS,
+  type RecipeSource,
 } from "@/lib/yarn-loom";
 import {
-  DEFAULT_LOOM_PARAMS,
-  LINEN,
   type ColorMode,
   type GroundMode,
   type GrowthMode,
   type LoomParams,
 } from "@/lib/yarn-loom/types";
-
-type SourceKind = "courtyard" | "portrait" | "plant" | "goat" | "image";
-
-const PRESETS: { id: SourceKind; label: string; url: string | null }[] = [
-  { id: "portrait", label: "Portrait", url: "/hero-photo.jpg" },
-  { id: "courtyard", label: "Courtyard", url: null },
-  { id: "plant", label: "Plant", url: "/plant.png" },
-  { id: "goat", label: "Goat", url: "/goat-lineart.png" },
-];
+import { TakeThis } from "./TakeThis";
+import {
+  YarnHoop,
+  type HoopStats,
+  type YarnHoopHandle,
+  useYarnPlayhead,
+} from "./YarnHoop";
 
 const GROWTH: { id: GrowthMode; label: string; hint: string }[] = [
   { id: "colonize", label: "Colonize", hint: "Ink & chroma first" },
@@ -69,305 +56,37 @@ const EDGE_PRESETS: { label: string; value: number }[] = [
   { label: "Unravelled", value: 0.86 },
 ];
 
-function weaveParamsOf(params: LoomParams): WeaveParams {
-  return {
-    density: params.density,
-    stitchLength: params.stitchLength,
-    colorMode: params.colorMode,
-    growth: params.growth,
-    seed: params.seed,
-    ground: params.ground,
-    fray: params.fray,
-  };
-}
-
-async function weaveOnMain(
-  source: SourceKind,
-  imageUrl: string | null,
-  params: LoomParams,
-): Promise<PackedStitches> {
-  const painted =
-    source === "courtyard" || !imageUrl
-      ? paintDemoSource()
-      : paintSourceFromImage(await loadImage(imageUrl));
-  return packStitches(
-    buildEmbroidery(painted.analysis, params),
-    painted.canvas.width,
-    painted.canvas.height,
-  );
-}
-
-/** Desktop hoop width. Floss is tuned here; phones scale thickness to match. */
-const HOOP_MAX_WIDTH = 620;
-
 export default function YarnStudio() {
-  const hoopRef = useRef<HTMLDivElement>(null);
-  const clothRef = useRef<HTMLCanvasElement>(null);
-  const stitchRef = useRef<HTMLCanvasElement>(null);
-  const liveRef = useRef<HTMLCanvasElement>(null);
+  const searchParams = useSearchParams();
+  const [boot] = useState(() => parseRecipe(searchParams));
+  const hoopRef = useRef<YarnHoopHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const loomRef = useRef<LoomClient | null>(null);
-  const lastCompleteRef = useRef(0);
 
-  const [params, setParams] = useState<LoomParams>(DEFAULT_LOOM_PARAMS);
-  const [source, setSource] = useState<SourceKind>("portrait");
-  const [imageUrl, setImageUrl] = useState<string | null>("/hero-photo.jpg");
-  const [packed, setPacked] = useState<PackedStitches | null>(null);
-  const [analysisSize, setAnalysisSize] = useState({ w: 340, h: 415 });
-  const [busy, setBusy] = useState(true);
-  const [playing, setPlaying] = useState(false);
-  const [t, setT] = useState(0);
+  const [params, setParams] = useState<LoomParams>(() => loomParamsOf(boot));
+  const [source, setSource] = useState<RecipeSource>(boot.source);
+  const [imageUrl, setImageUrl] = useState<string | null>(() => imageUrlOf(boot));
   const [dropOver, setDropOver] = useState(false);
+  const [stats, setStats] = useState<HoopStats>({
+    busy: true,
+    stitchCount: 0,
+    passages: 0,
+    width: 340,
+    height: 415,
+  });
 
-  const playingRef = useRef(false);
-  const tRef = useRef(0);
-  const lastTs = useRef<number | null>(null);
-
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
-  useEffect(() => {
-    tRef.current = t;
-  }, [t]);
-
-  const pad = frayPad(params.fray, params.ground);
-  const siteGround = params.ground === "site";
-
-  const genKey = [
-    source,
-    imageUrl ?? "",
-    params.density,
-    params.stitchLength,
-    params.colorMode,
-    params.growth,
-    params.seed,
-    params.fray,
-    params.ground,
-  ].join("|");
-  const [debouncedGenKey, setDebouncedGenKey] = useState(genKey);
-
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedGenKey(genKey), 90);
-    return () => window.clearTimeout(id);
-  }, [genKey]);
-
-  useEffect(() => {
-    const loom = new LoomClient();
-    loomRef.current = loom;
-    return () => {
-      loom.terminate();
-      loomRef.current = null;
-    };
-  }, []);
-
-  const applyPacked = (next: PackedStitches) => {
-    setAnalysisSize({ w: next.width, h: next.height });
-    setPacked(next);
-    setBusy(false);
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setPlaying(false);
-      setT(1);
-    } else {
-      setPlaying(true);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setBusy(true);
-      setPlaying(false);
-      setT(0);
-      const weave = weaveParamsOf(params);
-      try {
-        const loom = loomRef.current;
-        let next: PackedStitches;
-        if (loom) {
-          if (source === "courtyard" || !imageUrl) {
-            next = await loom.weaveCourtyard(weave);
-          } else {
-            const img = await loadImage(imageUrl);
-            if (cancelled) return;
-            const bitmap = await createImageBitmap(img);
-            if (cancelled) {
-              bitmap.close();
-              return;
-            }
-            next = await loom.weaveBitmap(bitmap, weave);
-          }
-        } else {
-          next = await weaveOnMain(source, imageUrl, params);
-        }
-        if (cancelled) return;
-        applyPacked(next);
-      } catch {
-        if (cancelled) return;
-        try {
-          const next = await weaveOnMain(source, imageUrl, params);
-          if (cancelled) return;
-          applyPacked(next);
-        } catch {
-          if (!cancelled) setBusy(false);
-        }
-      }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-    // Thickness, light, and duration are playback-only and must not re-thread.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedGenKey]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        setPlaying((p) => !p);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    if (!playing) {
-      lastTs.current = null;
-      return;
-    }
-    let raf = 0;
-    const tick = (ts: number) => {
-      if (!playingRef.current) return;
-      const last = lastTs.current ?? ts;
-      lastTs.current = ts;
-      const dt = Math.min(48, ts - last);
-      const next = Math.min(1, tRef.current + dt / params.durationMs);
-      setT(next);
-      if (next >= 1) {
-        setPlaying(false);
-        return;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, params.durationMs]);
-
-  const size = useHoopSize(
-    hoopRef,
-    (analysisSize.w + pad * 2) / (analysisSize.h + pad * 2),
+  const play = useYarnPlayhead(params.durationMs);
+  const recipe = useMemo(
+    () => recipeOf(params, source, imageUrl),
+    [params, source, imageUrl],
   );
 
-  const lastEasedRef = useRef(0);
-
   useEffect(() => {
-    const dpr = Math.min(3, window.devicePixelRatio || 1);
-    for (const canvas of [clothRef.current, stitchRef.current, liveRef.current]) {
-      if (!canvas || size.w === 0) continue;
-      canvas.width = Math.round(size.w * dpr);
-      canvas.height = Math.round(size.h * dpr);
-      const ctx = canvas.getContext("2d")!;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const qs = recipeToQuery(recipe);
+    const next = qs ? `/?${qs}` : "/";
+    if (window.location.search.slice(1) !== qs) {
+      window.history.replaceState(null, "", next);
     }
-    lastEasedRef.current = -1;
-    if (clothRef.current && size.w > 0) {
-      const ctx = clothRef.current.getContext("2d")!;
-      ctx.clearRect(0, 0, size.w, size.h);
-      if (params.ground !== "site") {
-        paintCloth(ctx, size.w, size.h, params.seed, params.ground);
-      }
-    }
-  }, [size.h, size.w, params.seed, params.ground]);
-
-  useEffect(() => {
-    lastEasedRef.current = -1;
-    lastCompleteRef.current = 0;
-  }, [params.lightAngle, params.thickness, packed, pad]);
-
-  useEffect(() => {
-    const canvas = stitchRef.current;
-    const live = liveRef.current;
-    if (!canvas || !live || size.w === 0 || !packed) return;
-    const ctx = canvas.getContext("2d")!;
-    const liveCtx = live.getContext("2d")!;
-    const eased = playheadEase(t);
-    const totalW = analysisSize.w + pad * 2;
-    const totalH = analysisSize.h + pad * 2;
-    const sx = size.w / totalW;
-    const sy = size.h / totalH;
-    const visualScale = size.w / HOOP_MAX_WIDTH;
-    const last = lastEasedRef.current;
-    const completeEnd = completeBound(packed, eased);
-    const scrubbedBack = eased < last - 0.0005;
-    const restyle = last < 0;
-
-    const strokeDone = (from: number, to: number) => {
-      for (let k = from; k < to; k++) {
-        drawPackedStitch(
-          ctx,
-          packed,
-          packed.byComplete[k],
-          1,
-          params.thickness,
-          params.lightAngle,
-          sx,
-          sy,
-          pad,
-          pad,
-          visualScale,
-        );
-      }
-    };
-
-    if (scrubbedBack || restyle) {
-      ctx.clearRect(0, 0, size.w, size.h);
-      strokeDone(0, completeEnd);
-      lastCompleteRef.current = completeEnd;
-    } else if (completeEnd > lastCompleteRef.current) {
-      strokeDone(lastCompleteRef.current, completeEnd);
-      lastCompleteRef.current = completeEnd;
-    }
-
-    liveCtx.clearRect(0, 0, size.w, size.h);
-    const growing = birthWindow(packed, eased);
-    for (let k = growing.start; k < growing.end; k++) {
-      const i = packed.byBirth[k];
-      const p = packedProgress(packed, i, eased);
-      if (p <= 0 || p >= 1) continue;
-      drawPackedStitch(
-        liveCtx,
-        packed,
-        i,
-        p,
-        params.thickness,
-        params.lightAngle,
-        sx,
-        sy,
-        pad,
-        pad,
-        visualScale,
-      );
-    }
-    if (eased < 0.98) {
-      const needles = collectPackedNeedles(packed, eased);
-      for (const n of needles) {
-        drawNeedle(liveCtx, n, sx, sy, pad, pad, visualScale);
-      }
-    }
-    drawMotes(liveCtx, size.w, size.h, eased);
-    lastEasedRef.current = eased;
-  }, [
-    analysisSize.h,
-    analysisSize.w,
-    packed,
-    params.lightAngle,
-    params.thickness,
-    size.h,
-    size.w,
-    t,
-    pad,
-  ]);
+  }, [recipe]);
 
   const onFiles = (files: FileList | null) => {
     const file = files?.[0];
@@ -384,10 +103,7 @@ export default function YarnStudio() {
     setParams((p) => ({ ...p, [key]: value }));
   };
 
-  const passages = packed?.passages ?? 0;
-  const stitchCount = packed?.count ?? 0;
-
-  const dolly = 1;
+  const siteGround = params.ground === "site";
 
   return (
     <div
@@ -395,78 +111,27 @@ export default function YarnStudio() {
       style={{ fontFamily: "var(--font-geist-sans)", color: "#3b3228" }}
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm mb-4" style={{ color: "#6d5c4c" }}>
-          Pick a source or drop your own image. Site fabric sews the stitches
-          into the page weave. Fray runs from a clean hem to threads that
-          wander onto the cloth.
-        </p>
-
         <div
           className={siteGround ? "-mx-2 sm:mx-0 px-2 py-8 bg-linen" : undefined}
         >
-          <div
+          <YarnHoop
             ref={hoopRef}
-            className={`relative mx-auto${siteGround ? " bg-linen" : ""}`}
-            style={{
-              width: "100%",
-              maxWidth: HOOP_MAX_WIDTH,
-              aspectRatio: `${analysisSize.w + pad * 2} / ${analysisSize.h + pad * 2}`,
-              overflow: params.fray > 0.04 || siteGround ? "visible" : "hidden",
-              ...(siteGround
-                ? { boxShadow: "none", borderRadius: 0 }
-                : {
-                    background:
-                      params.ground === "linen" ? LINEN.base : "#cbb79a",
-                    boxShadow:
-                      "0 18px 50px rgba(70,40,20,0.18), inset 0 0 0 1px rgba(90,60,30,0.18)",
-                    borderRadius: params.fray > 0.25 ? 0 : 4,
-                  }),
+            recipe={recipe}
+            src={imageUrl}
+            t={play.t}
+            interactive
+            dropOver={dropOver}
+            onDropOver={setDropOver}
+            onFiles={onFiles}
+            onStats={(next) => {
+              setStats(next);
+              if (next.busy) {
+                play.setPlaying(false);
+                play.setT(0);
+              }
             }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDropOver(true);
-            }}
-            onDragLeave={() => setDropOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDropOver(false);
-              onFiles(e.dataTransfer.files);
-            }}
-          >
-            <div
-              className="absolute inset-0 origin-center"
-              style={{ transform: `scale(${dolly})` }}
-            >
-              <canvas ref={clothRef} className="absolute inset-0 h-full w-full" />
-              <canvas ref={stitchRef} className="absolute inset-0 h-full w-full" />
-              <canvas ref={liveRef} className="absolute inset-0 h-full w-full" />
-            </div>
-
-            {(busy || dropOver) && (
-              <div
-                className="absolute inset-0 flex items-center justify-center"
-                style={{
-                  background: dropOver
-                    ? siteGround
-                      ? "rgba(243,239,230,0.55)"
-                      : "rgba(203,183,154,0.55)"
-                    : "transparent",
-                }}
-              >
-                <span
-                  className="text-sm tracking-wide"
-                  style={{
-                    fontFamily: "var(--font-cormorant)",
-                    color: "#4a3728",
-                    background: "rgba(232,220,200,0.72)",
-                    padding: "6px 14px",
-                  }}
-                >
-                  {dropOver ? "Drop image onto the linen" : "Threading the needle…"}
-                </span>
-              </div>
-            )}
-          </div>
+            onReady={play.begin}
+          />
         </div>
       </div>
 
@@ -477,10 +142,16 @@ export default function YarnStudio() {
           border: "1px solid rgba(140,90,50,0.18)",
         }}
       >
+        <TakeThis
+          recipe={recipe}
+          hoopRef={hoopRef}
+          customImage={source === "image" && !!imageUrl?.startsWith("blob:")}
+        />
+
         <section>
           <Label>Source</Label>
           <div className="flex flex-wrap gap-2 mt-2">
-            {PRESETS.map((p) => (
+            {SOURCE_PRESETS.map((p) => (
               <Chip
                 key={p.id}
                 active={source === p.id}
@@ -647,23 +318,23 @@ export default function YarnStudio() {
           <button
             type="button"
             onClick={() => {
-              if (t >= 1) {
-                setT(0);
-                setPlaying(true);
+              if (play.t >= 1) {
+                play.setT(0);
+                play.setPlaying(true);
                 return;
               }
-              setPlaying((p) => !p);
+              play.setPlaying((p) => !p);
             }}
             className="flex-1 py-2 text-sm"
             style={{ background: "#4a7ec7", color: "#f7f1e6" }}
           >
-            {playing ? "Pause" : t >= 1 ? "Replay" : "Play"}
+            {play.playing ? "Pause" : play.t >= 1 ? "Replay" : "Play"}
           </button>
           <button
             type="button"
             onClick={() => {
-              setT(0);
-              setPlaying(true);
+              play.setT(0);
+              play.setPlaying(true);
             }}
             className="px-3 py-2 text-sm"
             style={{ background: "#e8dcc8" }}
@@ -677,10 +348,10 @@ export default function YarnStudio() {
           min={0}
           max={1}
           step={0.001}
-          value={t}
+          value={play.t}
           onChange={(e) => {
-            setPlaying(false);
-            setT(Number(e.target.value));
+            play.setPlaying(false);
+            play.setT(Number(e.target.value));
           }}
           aria-label="Playhead"
           className="w-full"
@@ -690,8 +361,9 @@ export default function YarnStudio() {
           className="text-xs tabular-nums"
           style={{ fontFamily: "var(--font-space-mono)", color: "#8a6d55" }}
         >
-          {stitchCount.toLocaleString()} stitches · {passages} passages
-          {busy ? " · threading" : ""}
+          {stats.stitchCount.toLocaleString()} stitches · {stats.passages}{" "}
+          passages
+          {stats.busy ? " · threading" : ""}
         </p>
 
         <button
@@ -955,33 +627,4 @@ function Slider({
       />
     </label>
   );
-}
-
-function useHoopSize(
-  ref: React.RefObject<HTMLDivElement | null>,
-  aspect: number,
-) {
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => {
-      const w = el.clientWidth;
-      setSize({ w, h: w / aspect });
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [aspect, ref]);
-  return size;
-}
-
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Could not load image"));
-    img.src = url;
-  });
 }

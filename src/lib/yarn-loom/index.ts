@@ -93,3 +93,20 @@ export type { PackedStitches } from "./pack";
 export { weaveFromImageData } from "./weave";
 export type { WeaveParams } from "./weave";
 export { LoomClient } from "./loom-client";
+export {
+  parseRecipe,
+  recipeOf,
+  recipeToQuery,
+  loomParamsOf,
+  imageUrlOf,
+  presetUrl,
+  SOURCE_PRESETS,
+} from "./recipe";
+export type { ArrasRecipe, RecipeSource } from "./recipe";
+export {
+  agentPrompt,
+  embedSnippet,
+  embedUrl,
+  reactSnippet,
+  recipeJson,
+} from "./take";
