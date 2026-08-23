@@ -22,6 +22,15 @@ import {
   type LoomParams,
   type Stitch,
 } from "@/lib/yarn-loom/types";
+import {
+  CourtyardThumb,
+  LightOrbit,
+  PlusMark,
+  Segmented,
+  Slider,
+  SourceTile,
+  Transport,
+} from "@/components/studio-ui";
 
 type SourceKind = "courtyard" | "portrait" | "plant" | "goat" | "image";
 
@@ -32,35 +41,23 @@ const PRESETS: { id: SourceKind; label: string; url: string | null }[] = [
   { id: "goat", label: "Goat", url: "/goat-lineart.png" },
 ];
 
-const GROWTH: { id: GrowthMode; label: string; hint: string }[] = [
-  { id: "colonize", label: "Colonize", hint: "Ink & chroma first" },
-  { id: "sew", label: "Sew", hint: "Needle crawls, thread trails" },
-  { id: "weave", label: "Weave", hint: "Warp then weft" },
-  { id: "bloom", label: "Bloom", hint: "From the heart outward" },
+const GROWTH: { id: GrowthMode; label: string; title: string }[] = [
+  { id: "colonize", label: "Colonize", title: "Ink and chroma first" },
+  { id: "sew", label: "Sew", title: "Needle crawls, thread trails" },
+  { id: "weave", label: "Weave", title: "Warp then weft" },
+  { id: "bloom", label: "Bloom", title: "From the heart outward" },
 ];
 
-const GROUNDS: { id: GroundMode; label: string; hint: string }[] = [
-  {
-    id: "site",
-    label: "Site fabric",
-    hint: "Stitches on the page weave",
-  },
-  {
-    id: "linen",
-    label: "Linen patch",
-    hint: "White cloth rectangle",
-  },
-  {
-    id: "hessian",
-    label: "Hessian patch",
-    hint: "Tan sticker (old look)",
-  },
+const GROUNDS: { id: GroundMode; label: string }[] = [
+  { id: "site", label: "Plain" },
+  { id: "linen", label: "Linen" },
+  { id: "hessian", label: "Hessian" },
 ];
 
-const EDGE_PRESETS: { label: string; value: number }[] = [
-  { label: "Tight", value: 0 },
-  { label: "Lived-in", value: 0.38 },
-  { label: "Unravelled", value: 0.86 },
+const EDGE_PRESETS: { id: string; label: string; value: number }[] = [
+  { id: "tight", label: "Tight", value: 0 },
+  { id: "lived-in", label: "Lived-in", value: 0.38 },
+  { id: "unravelled", label: "Unravelled", value: 0.86 },
 ];
 
 /** Desktop hoop width. Floss is tuned here; phones scale thickness to match. */
@@ -87,11 +84,16 @@ export default function YarnStudio() {
   const tRef = useRef(0);
   const lastTs = useRef<number | null>(null);
 
-  playingRef.current = playing;
-  tRef.current = t;
+  useEffect(() => {
+    playingRef.current = playing;
+    tRef.current = t;
+  });
 
   const pad = frayPad(params.fray, params.ground);
   const siteGround = params.ground === "site";
+  const totalW = analysisSize.w + pad * 2;
+  const totalH = analysisSize.h + pad * 2;
+  const aspect = totalW / totalH;
 
   const genKey = [
     source,
@@ -130,7 +132,13 @@ export default function YarnStudio() {
       setAnalysisSize({ w: painted.canvas.width, h: painted.canvas.height });
       setStitches(built);
       setBusy(false);
-      setPlaying(true);
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+      if (reduce.matches) {
+        setPlaying(false);
+        setT(1);
+      } else {
+        setPlaying(true);
+      }
     };
     void run();
     return () => {
@@ -142,7 +150,13 @@ export default function YarnStudio() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLButtonElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
       if (e.code === "Space") {
         e.preventDefault();
         setPlaying((p) => !p);
@@ -175,10 +189,7 @@ export default function YarnStudio() {
     return () => cancelAnimationFrame(raf);
   }, [playing, params.durationMs]);
 
-  const size = useHoopSize(
-    hoopRef,
-    (analysisSize.w + pad * 2) / (analysisSize.h + pad * 2),
-  );
+  const size = useHoopSize(hoopRef, aspect);
 
   const lastEasedRef = useRef(0);
 
@@ -212,8 +223,6 @@ export default function YarnStudio() {
     const ctx = canvas.getContext("2d")!;
     const liveCtx = live.getContext("2d")!;
     const eased = playheadEase(t);
-    const totalW = analysisSize.w + pad * 2;
-    const totalH = analysisSize.h + pad * 2;
     const sx = size.w / totalW;
     const sy = size.h / totalH;
     const visualScale = size.w / HOOP_MAX_WIDTH;
@@ -287,6 +296,8 @@ export default function YarnStudio() {
     stitches,
     t,
     pad,
+    totalH,
+    totalW,
   ]);
 
   const onFiles = (files: FileList | null) => {
@@ -300,14 +311,6 @@ export default function YarnStudio() {
     setSource("image");
   };
 
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reduce.matches) {
-      setPlaying(false);
-      setT(1);
-    }
-  }, [stitches]);
-
   const patch = <K extends keyof LoomParams>(key: K, value: LoomParams[K]) => {
     setParams((p) => ({ ...p, [key]: value }));
   };
@@ -317,41 +320,32 @@ export default function YarnStudio() {
     return ids.size;
   }, [stitches]);
 
-  const dolly = 1;
+  const activeEdge =
+    EDGE_PRESETS.find((preset) => Math.abs(params.fray - preset.value) < 0.03)
+      ?.id ?? "lived-in";
+
+  const stageFill = siteGround
+    ? "#f6f6f6"
+    : params.ground === "linen"
+      ? LINEN.base
+      : "#cbb79a";
 
   return (
-    <div
-      className="flex flex-col gap-5 lg:flex-row lg:items-start"
-      style={{ fontFamily: "var(--font-geist-sans)", color: "#3b3228" }}
-    >
-      <div className="flex-1 min-w-0">
-        <p className="text-sm mb-4" style={{ color: "#6d5c4c" }}>
-          Pick a source or drop your own image. Site fabric sews the stitches
-          into the page weave. Fray runs from a clean hem to threads that
-          wander onto the cloth.
-        </p>
-
+    <div className="studio h-full lg:h-auto lg:max-w-[1180px] lg:mx-auto lg:px-8 lg:pb-16 flex flex-col lg:flex-row lg:items-start lg:gap-10">
+      <section className="shrink-0 px-4 pb-3 lg:flex-1 lg:px-0 lg:sticky lg:top-6">
         <div
-          className={siteGround ? "-mx-2 sm:mx-0 px-2 py-8 bg-linen" : undefined}
+          className="preview-frame mx-auto overflow-hidden rounded-[24px] bg-card"
+          style={{
+            ["--preview-aspect" as string]: String(aspect),
+            boxShadow:
+              "0 1px 2px rgba(0,0,0,0.04), 0 12px 32px rgba(0,0,0,0.08)",
+          }}
         >
           <div
             ref={hoopRef}
-            className={`relative mx-auto${siteGround ? " bg-linen" : ""}`}
-            style={{
-              width: "100%",
-              maxWidth: HOOP_MAX_WIDTH,
-              aspectRatio: `${analysisSize.w + pad * 2} / ${analysisSize.h + pad * 2}`,
-              overflow: params.fray > 0.04 || siteGround ? "visible" : "hidden",
-              ...(siteGround
-                ? { boxShadow: "none", borderRadius: 0 }
-                : {
-                    background:
-                      params.ground === "linen" ? LINEN.base : "#cbb79a",
-                    boxShadow:
-                      "0 18px 50px rgba(70,40,20,0.18), inset 0 0 0 1px rgba(90,60,30,0.18)",
-                    borderRadius: params.fray > 0.25 ? 0 : 4,
-                  }),
-            }}
+            className="relative w-full h-full"
+            title="Drop an image"
+            style={{ background: stageFill }}
             onDragOver={(e) => {
               e.preventDefault();
               setDropOver(true);
@@ -363,527 +357,190 @@ export default function YarnStudio() {
               onFiles(e.dataTransfer.files);
             }}
           >
-            <div
-              className="absolute inset-0 origin-center"
-              style={{ transform: `scale(${dolly})` }}
-            >
-              <canvas ref={clothRef} className="absolute inset-0 h-full w-full" />
-              <canvas ref={stitchRef} className="absolute inset-0 h-full w-full" />
-              <canvas ref={liveRef} className="absolute inset-0 h-full w-full" />
-            </div>
-
-            {(busy || dropOver) && (
-              <div
-                className="absolute inset-0 flex items-center justify-center"
-                style={{
-                  background: dropOver
-                    ? siteGround
-                      ? "rgba(243,239,230,0.55)"
-                      : "rgba(203,183,154,0.55)"
-                    : "transparent",
-                }}
-              >
-                <span
-                  className="text-sm tracking-wide"
-                  style={{
-                    fontFamily: "var(--font-cormorant)",
-                    color: "#4a3728",
-                    background: "rgba(232,220,200,0.72)",
-                    padding: "6px 14px",
-                  }}
-                >
-                  {dropOver ? "Drop image onto the linen" : "Threading the needle…"}
-                </span>
+            <canvas ref={clothRef} className="absolute inset-0 h-full w-full" />
+            <canvas ref={stitchRef} className="absolute inset-0 h-full w-full" />
+            <canvas ref={liveRef} className="absolute inset-0 h-full w-full" />
+            <Transport
+              playing={playing}
+              t={t}
+              busy={busy}
+              stitchCount={stitches.length}
+              passages={passages}
+              onToggle={() => {
+                if (t >= 1) {
+                  setT(0);
+                  setPlaying(true);
+                  return;
+                }
+                setPlaying((p) => !p);
+              }}
+              onRewind={() => {
+                setT(0);
+                setPlaying(true);
+              }}
+              onScrub={(next) => {
+                setPlaying(false);
+                setT(next);
+              }}
+            />
+            {dropOver ? (
+              <div className="absolute inset-0 grid place-items-center bg-white/70 text-[15px] font-medium">
+                Drop photo
               </div>
-            )}
+            ) : null}
           </div>
         </div>
-      </div>
+      </section>
 
-      <aside
-        className="w-full lg:w-[300px] shrink-0 flex flex-col gap-4 p-4"
-        style={{
-          background: "#efe4d0",
-          border: "1px solid rgba(140,90,50,0.18)",
-        }}
-      >
-        <section>
-          <Label>Source</Label>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {PRESETS.map((p) => (
-              <Chip
-                key={p.id}
-                active={source === p.id}
+      <section className="flex-1 min-h-0 bg-card rounded-t-[24px] lg:rounded-[24px] lg:w-[340px] lg:flex-none lg:mt-0 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] lg:shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_rgba(0,0,0,0.08)] flex flex-col">
+        <div className="lg:hidden flex justify-center pt-2 pb-1">
+          <div className="w-10 h-1 rounded-full bg-[#d4d4d4]" />
+        </div>
+        <div className="sheet-scroll flex-1 min-h-0 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2 lg:px-5 lg:py-6 flex flex-col gap-6">
+          <div className="thumb-row flex gap-2.5 overflow-x-auto pb-1">
+            {PRESETS.map((preset) => (
+              <SourceTile
+                key={preset.id}
+                label={preset.label}
+                active={source === preset.id}
                 onClick={() => {
-                  setSource(p.id);
-                  setImageUrl(p.url);
+                  setSource(preset.id);
+                  setImageUrl(preset.url);
                 }}
               >
-                {p.label}
-              </Chip>
+                {preset.id === "courtyard" ? (
+                  <CourtyardThumb />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={preset.url ?? ""}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    style={{
+                      objectPosition:
+                        preset.id === "portrait" ? "center top" : "center",
+                    }}
+                  />
+                )}
+              </SourceTile>
             ))}
-            <Chip
+            <SourceTile
+              label="Upload image"
               active={source === "image"}
               onClick={() => fileRef.current?.click()}
             >
-              Upload
-            </Chip>
+              {source === "image" && imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="grid h-full w-full place-items-center text-muted bg-well">
+                  <PlusMark />
+                </span>
+              )}
+            </SourceTile>
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => onFiles(e.target.files)}
+
+          <Segmented
+            label="Cloth"
+            value={params.ground}
+            options={GROUNDS}
+            onChange={(id) => patch("ground", id)}
           />
-        </section>
-
-        <section>
-          <Label>Ground</Label>
-          <p className="text-[11px] mt-1 mb-2" style={{ color: "#8a6d55" }}>
-            Site fabric is the compositing target: no baked beige, same weave
-            as the page, hoop and site sharing one cloth.
-          </p>
-          <div className="grid grid-cols-1 gap-2">
-            {GROUNDS.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => patch("ground", g.id)}
-                className="text-left px-2 py-2 text-xs"
-                style={{
-                  background: params.ground === g.id ? "#4a7ec7" : "#e8dcc8",
-                  color: params.ground === g.id ? "#f7f1e6" : "#3b3228",
-                }}
-              >
-                <span className="block font-medium">{g.label}</span>
-                <span className="opacity-80">{g.hint}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <Label>Edge</Label>
-          <p className="text-[11px] mt-1 mb-2" style={{ color: "#8a6d55" }}>
-            Tight clips to a hem. Unravelled overshoots, yaws off-grain, and
-            leaves stray fibers on the cloth.
-          </p>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {EDGE_PRESETS.map((preset) => (
-              <Chip
-                key={preset.label}
-                active={Math.abs(params.fray - preset.value) < 0.03}
-                onClick={() => patch("fray", preset.value)}
-              >
-                {preset.label}
-              </Chip>
-            ))}
-          </div>
-          <Slider
-            label="Fray"
-            min={0}
-            max={1}
-            step={0.01}
-            value={params.fray}
-            onChange={(v) => patch("fray", v)}
-            display={
-              params.fray < 0.08
-                ? "hemmed"
-                : params.fray > 0.72
-                  ? "unravelled"
-                  : `${Math.round(params.fray * 100)}%`
+          <Segmented
+            label="Edge"
+            value={activeEdge}
+            options={EDGE_PRESETS.map((preset) => ({
+              id: preset.id,
+              label: preset.label,
+            }))}
+            onChange={(id) => {
+              const preset = EDGE_PRESETS.find((item) => item.id === id);
+              if (preset) patch("fray", preset.value);
+            }}
+          />
+          <Segmented
+            label="Growth"
+            value={params.growth}
+            options={GROWTH}
+            columns={2}
+            onChange={(id) => patch("growth", id)}
+          />
+          <Segmented
+            label="Color"
+            value={params.colorMode}
+            options={
+              [
+                { id: "sampled", label: "Sampled" },
+                { id: "sunbleached", label: "Sun-bleached" },
+              ] satisfies { id: ColorMode; label: string }[]
             }
+            onChange={(id) => patch("colorMode", id)}
           />
-        </section>
 
-        <section>
-          <Label>Growth</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {GROWTH.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => patch("growth", g.id)}
-                className="text-left px-2 py-2 text-xs"
-                style={{
-                  background: params.growth === g.id ? "#4a7ec7" : "#e8dcc8",
-                  color: params.growth === g.id ? "#f7f1e6" : "#3b3228",
-                }}
-                title={g.hint}
-              >
-                <span className="block font-medium">{g.label}</span>
-                <span className="opacity-80">{g.hint}</span>
-              </button>
-            ))}
+          <div className="flex flex-col gap-4 pt-1">
+            <Slider
+              label="Density"
+              min={0.5}
+              max={1}
+              step={0.01}
+              value={params.density}
+              onChange={(v) => patch("density", v)}
+              display={`${Math.round(params.density * 100)}%`}
+            />
+            <Slider
+              label="Stitch"
+              min={4}
+              max={14}
+              step={0.1}
+              value={params.stitchLength}
+              onChange={(v) => patch("stitchLength", v)}
+            />
+            <Slider
+              label="Floss"
+              min={0.8}
+              max={3.2}
+              step={0.05}
+              value={params.thickness}
+              onChange={(v) => patch("thickness", v)}
+            />
+            <Slider
+              label="Duration"
+              min={4000}
+              max={28000}
+              step={250}
+              value={params.durationMs}
+              onChange={(v) => patch("durationMs", v)}
+              display={`${(params.durationMs / 1000).toFixed(1)}s`}
+            />
           </div>
-        </section>
 
-        <Slider
-          label="Density"
-          min={0.5}
-          max={1}
-          step={0.01}
-          value={params.density}
-          onChange={(v) => patch("density", v)}
-          display={`${Math.round(params.density * 100)}%`}
-        />
-        <Slider
-          label="Stitch length"
-          min={4}
-          max={14}
-          step={0.1}
-          value={params.stitchLength}
-          onChange={(v) => patch("stitchLength", v)}
-        />
-        <Slider
-          label="Floss weight"
-          min={0.8}
-          max={3.2}
-          step={0.05}
-          value={params.thickness}
-          onChange={(v) => patch("thickness", v)}
-        />
-        <LightEditor
-          angle={params.lightAngle}
-          onChange={(v) => patch("lightAngle", v)}
-        />
-        <Slider
-          label="Duration"
-          min={4000}
-          max={28000}
-          step={250}
-          value={params.durationMs}
-          onChange={(v) => patch("durationMs", v)}
-          display={`${(params.durationMs / 1000).toFixed(1)}s`}
-        />
+          <LightOrbit
+            angle={params.lightAngle}
+            onChange={(v) => patch("lightAngle", v)}
+          />
 
-        <section>
-          <Label>Color</Label>
-          <div className="flex gap-2 mt-2">
-            {(["sampled", "sunbleached"] as ColorMode[]).map((m) => (
-              <Chip
-                key={m}
-                active={params.colorMode === m}
-                onClick={() => patch("colorMode", m)}
-              >
-                {m === "sampled" ? "Sampled" : "Sun-bleached"}
-              </Chip>
-            ))}
-          </div>
-        </section>
-
-        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => {
-              if (t >= 1) {
-                setT(0);
-                setPlaying(true);
-                return;
-              }
-              setPlaying((p) => !p);
-            }}
-            className="flex-1 py-2 text-sm"
-            style={{ background: "#4a7ec7", color: "#f7f1e6" }}
+            onClick={() => patch("seed", params.seed + 1)}
+            className="text-[15px] font-medium self-start text-muted"
           >
-            {playing ? "Pause" : t >= 1 ? "Replay" : "Play"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setT(0);
-              setPlaying(true);
-            }}
-            className="px-3 py-2 text-sm"
-            style={{ background: "#e8dcc8" }}
-          >
-            Rewind
+            Re-thread
           </button>
         </div>
+      </section>
 
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.001}
-          value={t}
-          onChange={(e) => {
-            setPlaying(false);
-            setT(Number(e.target.value));
-          }}
-          aria-label="Playhead"
-          className="w-full"
-        />
-
-        <p
-          className="text-xs tabular-nums"
-          style={{ fontFamily: "var(--font-space-mono)", color: "#8a6d55" }}
-        >
-          {stitches.length.toLocaleString()} stitches · {passages} passages
-          {busy ? " · threading" : ""}
-        </p>
-
-        <button
-          type="button"
-          onClick={() => patch("seed", params.seed + 1)}
-          className="text-xs self-start underline underline-offset-4"
-          style={{ color: "#6d5c4c" }}
-        >
-          Re-thread with a new seed
-        </button>
-      </aside>
-    </div>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="text-[11px] tracking-[0.18em] uppercase"
-      style={{ color: "#8a6d55" }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function LightEditor({
-  angle,
-  onChange,
-}: {
-  angle: number;
-  onChange: (angle: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDoc);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDoc);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative">
-      <div className="flex items-center justify-between gap-2">
-        <Label>Light</Label>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          onClick={() => setOpen((v) => !v)}
-          className="px-3 py-1.5 text-xs"
-          style={{
-            background: open ? "#4a7ec7" : "#e8dcc8",
-            color: open ? "#f7f1e6" : "#3b3228",
-          }}
-        >
-          Edit light
-        </button>
-      </div>
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Light direction"
-          className="absolute left-0 right-0 z-20 mt-2 p-3"
-          style={{
-            background: "#f7f1e6",
-            border: "1px solid rgba(140,90,50,0.22)",
-            boxShadow: "0 10px 28px rgba(70,40,20,0.12)",
-          }}
-        >
-          <p
-            className="text-[11px] mb-2 text-center"
-            style={{ color: "#8a6d55" }}
-          >
-            Drag the lamp around the hoop
-          </p>
-          <LightOrbit angle={angle} onChange={onChange} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LightOrbit({
-  angle,
-  onChange,
-}: {
-  angle: number;
-  onChange: (angle: number) => void;
-}) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const dragging = useRef(false);
-  const size = 148;
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = 52;
-  const lampA = angle + Math.PI;
-  const lampX = cx + Math.cos(lampA) * radius;
-  const lampY = cy + Math.sin(lampA) * radius;
-
-  const setFromEvent = (e: { clientX: number; clientY: number }) => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * size - cx;
-    const y = ((e.clientY - rect.top) / rect.height) * size - cy;
-    if (x * x + y * y < 4) return;
-    let next = Math.atan2(y, x) + Math.PI;
-    while (next > Math.PI) next -= Math.PI * 2;
-    while (next < -Math.PI) next += Math.PI * 2;
-    onChange(next);
-  };
-
-  return (
-    <svg
-      ref={svgRef}
-      width="100%"
-      viewBox={`0 0 ${size} ${size}`}
-      className="block mx-auto cursor-crosshair select-none"
-      style={{ maxWidth: 168, touchAction: "none" }}
-      aria-label="Light orbit"
-      onPointerDown={(e) => {
-        dragging.current = true;
-        (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
-        setFromEvent(e);
-      }}
-      onPointerMove={(e) => {
-        if (!dragging.current) return;
-        setFromEvent(e);
-      }}
-      onPointerUp={() => {
-        dragging.current = false;
-      }}
-    >
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill="none"
-        stroke="rgba(140,90,50,0.28)"
-        strokeWidth="1.2"
-        strokeDasharray="3 3"
-      />
-      <line
-        x1={lampX}
-        y1={lampY}
-        x2={cx}
-        y2={cy}
-        stroke="rgba(74,126,199,0.45)"
-        strokeWidth="1"
-      />
-      <circle
-        cx={cx}
-        cy={cy}
-        r="11"
-        fill="#cbb79a"
-        stroke="rgba(90,60,30,0.45)"
-        strokeWidth="1.4"
-      />
-      <circle cx={cx} cy={cy} r="2.2" fill="#4a3728" />
-      <circle
-        cx={lampX}
-        cy={lampY}
-        r="8"
-        fill="#f3e2a8"
-        stroke="#c4a040"
-        strokeWidth="1.4"
-      />
-      {[0, 1, 2, 3].map((i) => {
-        const a = lampA + (i * Math.PI) / 2;
-        const inner = 11;
-        const outer = 15;
-        return (
-          <line
-            key={i}
-            x1={lampX + Math.cos(a) * inner}
-            y1={lampY + Math.sin(a) * inner}
-            x2={lampX + Math.cos(a) * outer}
-            y2={lampY + Math.sin(a) * outer}
-            stroke="#c4a040"
-            strokeWidth="1.2"
-            strokeLinecap="round"
-          />
-        );
-      })}
-    </svg>
-  );
-}
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="px-3 py-1.5 text-xs"
-      style={{
-        background: active ? "#4a7ec7" : "#e8dcc8",
-        color: active ? "#f7f1e6" : "#3b3228",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  display,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-  display?: string;
-}) {
-  return (
-    <label className="block">
-      <div className="flex justify-between mb-1">
-        <Label>{label}</Label>
-        <span
-          className="text-[11px] tabular-nums"
-          style={{ fontFamily: "var(--font-space-mono)", color: "#8a6d55" }}
-        >
-          {display ?? value.toFixed(2)}
-        </span>
-      </div>
       <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full"
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => onFiles(e.target.files)}
       />
-    </label>
+    </div>
   );
 }
 
@@ -897,7 +554,8 @@ function useHoopSize(
     if (!el) return;
     const measure = () => {
       const w = el.clientWidth;
-      setSize({ w, h: w / aspect });
+      const h = el.clientHeight;
+      setSize({ w, h: h > 0 ? h : w / aspect });
     };
     measure();
     const ro = new ResizeObserver(measure);
