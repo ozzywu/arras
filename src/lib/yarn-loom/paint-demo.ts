@@ -1,7 +1,9 @@
 import { createRng } from "./rng";
 
+type PaintCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
 function strokeFan(
-  ctx: CanvasRenderingContext2D,
+  ctx: PaintCtx,
   ox: number,
   oy: number,
   angle: number,
@@ -27,7 +29,7 @@ function strokeFan(
 }
 
 function fillEll(
-  ctx: CanvasRenderingContext2D,
+  ctx: PaintCtx,
   x: number,
   y: number,
   rx: number,
@@ -46,7 +48,7 @@ function fillEll(
  * palms, herringbone cobbles, hatched shirt).
  */
 export function paintCourtyard(
-  ctx: CanvasRenderingContext2D,
+  ctx: PaintCtx,
   w: number,
   h: number,
   seed = 3,

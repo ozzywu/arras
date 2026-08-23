@@ -1,18 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  birthWindow,
   buildEmbroidery,
+  collectPackedNeedles,
+  completeBound,
   drawMotes,
   drawNeedle,
+  drawPackedStitch,
   frayPad,
+  LoomClient,
+  packStitches,
+  packedProgress,
   paintCloth,
   paintDemoSource,
   paintSourceFromImage,
   playheadEase,
-  renderStitches,
+  type PackedStitches,
+  type WeaveParams,
 } from "@/lib/yarn-loom";
-import { stitchProgress } from "@/lib/yarn-loom/timeline";
 import {
   DEFAULT_LOOM_PARAMS,
   LINEN,
@@ -20,7 +27,6 @@ import {
   type GroundMode,
   type GrowthMode,
   type LoomParams,
-  type Stitch,
 } from "@/lib/yarn-loom/types";
 
 type SourceKind = "courtyard" | "portrait" | "plant" | "goat" | "image";
@@ -63,17 +69,47 @@ const EDGE_PRESETS: { label: string; value: number }[] = [
   { label: "Unravelled", value: 0.86 },
 ];
 
+function weaveParamsOf(params: LoomParams): WeaveParams {
+  return {
+    density: params.density,
+    stitchLength: params.stitchLength,
+    colorMode: params.colorMode,
+    growth: params.growth,
+    seed: params.seed,
+    ground: params.ground,
+    fray: params.fray,
+  };
+}
+
+async function weaveOnMain(
+  source: SourceKind,
+  imageUrl: string | null,
+  params: LoomParams,
+): Promise<PackedStitches> {
+  const painted =
+    source === "courtyard" || !imageUrl
+      ? paintDemoSource()
+      : paintSourceFromImage(await loadImage(imageUrl));
+  return packStitches(
+    buildEmbroidery(painted.analysis, params),
+    painted.canvas.width,
+    painted.canvas.height,
+  );
+}
+
 export default function YarnStudio() {
   const hoopRef = useRef<HTMLDivElement>(null);
   const clothRef = useRef<HTMLCanvasElement>(null);
   const stitchRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const loomRef = useRef<LoomClient | null>(null);
+  const lastCompleteRef = useRef(0);
 
   const [params, setParams] = useState<LoomParams>(DEFAULT_LOOM_PARAMS);
   const [source, setSource] = useState<SourceKind>("portrait");
   const [imageUrl, setImageUrl] = useState<string | null>("/hero-photo.jpg");
-  const [stitches, setStitches] = useState<Stitch[]>([]);
+  const [packed, setPacked] = useState<PackedStitches | null>(null);
   const [analysisSize, setAnalysisSize] = useState({ w: 340, h: 415 });
   const [busy, setBusy] = useState(true);
   const [playing, setPlaying] = useState(false);
@@ -84,8 +120,12 @@ export default function YarnStudio() {
   const tRef = useRef(0);
   const lastTs = useRef<number | null>(null);
 
-  playingRef.current = playing;
-  tRef.current = t;
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const pad = frayPad(params.fray, params.ground);
   const siteGround = params.ground === "site";
@@ -109,25 +149,64 @@ export default function YarnStudio() {
   }, [genKey]);
 
   useEffect(() => {
+    const loom = new LoomClient();
+    loomRef.current = loom;
+    return () => {
+      loom.terminate();
+      loomRef.current = null;
+    };
+  }, []);
+
+  const applyPacked = (next: PackedStitches) => {
+    setAnalysisSize({ w: next.width, h: next.height });
+    setPacked(next);
+    setBusy(false);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setPlaying(false);
+      setT(1);
+    } else {
+      setPlaying(true);
+    }
+  };
+
+  useEffect(() => {
     let cancelled = false;
     const run = async () => {
       setBusy(true);
       setPlaying(false);
       setT(0);
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      if (cancelled) return;
-
-      const painted =
-        source === "courtyard" || !imageUrl
-          ? paintDemoSource()
-          : paintSourceFromImage(await loadImage(imageUrl));
-      if (cancelled) return;
-
-      const built = buildEmbroidery(painted.analysis, params);
-      setAnalysisSize({ w: painted.canvas.width, h: painted.canvas.height });
-      setStitches(built);
-      setBusy(false);
-      setPlaying(true);
+      const weave = weaveParamsOf(params);
+      try {
+        const loom = loomRef.current;
+        let next: PackedStitches;
+        if (loom) {
+          if (source === "courtyard" || !imageUrl) {
+            next = await loom.weaveCourtyard(weave);
+          } else {
+            const img = await loadImage(imageUrl);
+            if (cancelled) return;
+            const bitmap = await createImageBitmap(img);
+            if (cancelled) {
+              bitmap.close();
+              return;
+            }
+            next = await loom.weaveBitmap(bitmap, weave);
+          }
+        } else {
+          next = await weaveOnMain(source, imageUrl, params);
+        }
+        if (cancelled) return;
+        applyPacked(next);
+      } catch {
+        if (cancelled) return;
+        try {
+          const next = await weaveOnMain(source, imageUrl, params);
+          if (cancelled) return;
+          applyPacked(next);
+        } catch {
+          if (!cancelled) setBusy(false);
+        }
+      }
     };
     void run();
     return () => {
@@ -200,12 +279,13 @@ export default function YarnStudio() {
 
   useEffect(() => {
     lastEasedRef.current = -1;
-  }, [params.lightAngle, params.thickness, stitches, pad]);
+    lastCompleteRef.current = 0;
+  }, [params.lightAngle, params.thickness, packed, pad]);
 
   useEffect(() => {
     const canvas = stitchRef.current;
     const live = liveRef.current;
-    if (!canvas || !live || size.w === 0) return;
+    if (!canvas || !live || size.w === 0 || !packed) return;
     const ctx = canvas.getContext("2d")!;
     const liveCtx = live.getContext("2d")!;
     const eased = playheadEase(t);
@@ -214,56 +294,57 @@ export default function YarnStudio() {
     const sx = size.w / totalW;
     const sy = size.h / totalH;
     const last = lastEasedRef.current;
+    const completeEnd = completeBound(packed, eased);
     const scrubbedBack = eased < last - 0.0005;
     const restyle = last < 0;
 
+    const strokeDone = (from: number, to: number) => {
+      for (let k = from; k < to; k++) {
+        drawPackedStitch(
+          ctx,
+          packed,
+          packed.byComplete[k],
+          1,
+          params.thickness,
+          params.lightAngle,
+          sx,
+          sy,
+          pad,
+          pad,
+        );
+      }
+    };
+
     if (scrubbedBack || restyle) {
       ctx.clearRect(0, 0, size.w, size.h);
-      const done = stitches.filter((s) => stitchProgress(s, eased) >= 1);
-      renderStitches(ctx, {
-        stitches: done,
-        t: 1,
-        thickness: params.thickness,
-        lightAngle: params.lightAngle,
-        scaleX: sx,
-        scaleY: sy,
-        originX: pad,
-        originY: pad,
-      });
-    } else {
-      const newly = stitches.filter(
-        (s) => stitchProgress(s, eased) >= 1 && stitchProgress(s, last) < 1,
-      );
-      if (newly.length) {
-        renderStitches(ctx, {
-          stitches: newly,
-          t: 1,
-          thickness: params.thickness,
-          lightAngle: params.lightAngle,
-          scaleX: sx,
-          scaleY: sy,
-          originX: pad,
-          originY: pad,
-        });
-      }
+      strokeDone(0, completeEnd);
+      lastCompleteRef.current = completeEnd;
+    } else if (completeEnd > lastCompleteRef.current) {
+      strokeDone(lastCompleteRef.current, completeEnd);
+      lastCompleteRef.current = completeEnd;
     }
 
     liveCtx.clearRect(0, 0, size.w, size.h);
-    const growing = stitches.filter((s) => {
-      const p = stitchProgress(s, eased);
-      return p > 0 && p < 1;
-    });
-    const needles = renderStitches(liveCtx, {
-      stitches: growing,
-      t: eased,
-      thickness: params.thickness,
-      lightAngle: params.lightAngle,
-      scaleX: sx,
-      scaleY: sy,
-      originX: pad,
-      originY: pad,
-    });
+    const growing = birthWindow(packed, eased);
+    for (let k = growing.start; k < growing.end; k++) {
+      const i = packed.byBirth[k];
+      const p = packedProgress(packed, i, eased);
+      if (p <= 0 || p >= 1) continue;
+      drawPackedStitch(
+        liveCtx,
+        packed,
+        i,
+        p,
+        params.thickness,
+        params.lightAngle,
+        sx,
+        sy,
+        pad,
+        pad,
+      );
+    }
     if (eased < 0.98) {
+      const needles = collectPackedNeedles(packed, eased);
       for (const n of needles) drawNeedle(liveCtx, n, sx, sy, pad, pad);
     }
     drawMotes(liveCtx, size.w, size.h, eased);
@@ -271,11 +352,11 @@ export default function YarnStudio() {
   }, [
     analysisSize.h,
     analysisSize.w,
+    packed,
     params.lightAngle,
     params.thickness,
     size.h,
     size.w,
-    stitches,
     t,
     pad,
   ]);
@@ -291,22 +372,12 @@ export default function YarnStudio() {
     setSource("image");
   };
 
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reduce.matches) {
-      setPlaying(false);
-      setT(1);
-    }
-  }, [stitches]);
-
   const patch = <K extends keyof LoomParams>(key: K, value: LoomParams[K]) => {
     setParams((p) => ({ ...p, [key]: value }));
   };
 
-  const passages = useMemo(() => {
-    const ids = new Set(stitches.map((s) => s.passage));
-    return ids.size;
-  }, [stitches]);
+  const passages = packed?.passages ?? 0;
+  const stitchCount = packed?.count ?? 0;
 
   const dolly = 1;
 
@@ -611,7 +682,7 @@ export default function YarnStudio() {
           className="text-xs tabular-nums"
           style={{ fontFamily: "var(--font-space-mono)", color: "#8a6d55" }}
         >
-          {stitches.length.toLocaleString()} stitches · {passages} passages
+          {stitchCount.toLocaleString()} stitches · {passages} passages
           {busy ? " · threading" : ""}
         </p>
 
