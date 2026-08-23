@@ -38,5 +38,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# cursor
-.cursor/
+# cursor (keep shared rules; ignore the rest)
+.cursor/*
+!.cursor/rules/
