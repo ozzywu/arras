@@ -126,10 +126,14 @@ export function assignBirths(
   return stitches;
 }
 
-export function stitchProgress(stitch: Stitch, t: number): number {
-  if (t <= stitch.birth) return 0;
-  const local = (t - stitch.birth) / Math.max(0.004, stitch.grow);
+export function growthProgress(birth: number, grow: number, t: number): number {
+  if (t <= birth) return 0;
+  const local = (t - birth) / Math.max(0.004, grow);
   return easeOutCubic(clamp01(local));
+}
+
+export function stitchProgress(stitch: Stitch, t: number): number {
+  return growthProgress(stitch.birth, stitch.grow, t);
 }
 
 export function playheadEase(t: number): number {

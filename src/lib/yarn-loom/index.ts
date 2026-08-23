@@ -1,5 +1,4 @@
 import { analyzeImageData } from "./analyze";
-import { paintCloth } from "./cloth";
 import { applyFray } from "./fray";
 import { generateStitches } from "./generate";
 import { paintCourtyard } from "./paint-demo";
@@ -79,5 +78,18 @@ export { paintCloth, linenPatternUrl, linenBackgroundStyle } from "./cloth";
 export { frayPad, applyFray } from "./fray";
 export type { GroundMode, LoomParams, Stitch } from "./types";
 export { playheadEase } from "./timeline";
-export { renderStitches, drawNeedle, drawMotes } from "./render";
+export {
+  renderStitches,
+  drawNeedle,
+  drawMotes,
+  drawPackedStitch,
+  collectPackedNeedles,
+  completeBound,
+  birthWindow,
+} from "./render";
 export type { Needle } from "./render";
+export { packStitches, packedProgress } from "./pack";
+export type { PackedStitches } from "./pack";
+export { weaveFromImageData } from "./weave";
+export type { WeaveParams } from "./weave";
+export { LoomClient } from "./loom-client";
