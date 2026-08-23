@@ -30,3 +30,4 @@ public/                  # Demo sources + linen texture
 - Image handling is client-side only (`FileReader` / `Image`). Do not add a upload API unless asked.
 - Demo presets live in `public/` (`hero-photo.jpg`, `plant.png`, `goat-lineart.png`). Courtyard is painted procedurally.
 - Deploy on Vercel with no environment variables.
+- After any visual change, include the live Vercel preview URL in the wrap-up without being asked. Prefer the stable `*-git-*.vercel.app` preview from the PR (Vercel’s GitHub comment or deployment statuses), not just the dashboard inspect link. Include the PR URL too. If it is still deploying, say so and post the URL as soon as it is Ready.

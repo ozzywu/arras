@@ -97,6 +97,9 @@ async function weaveOnMain(
   );
 }
 
+/** Desktop hoop width. Floss is tuned here; phones scale thickness to match. */
+const HOOP_MAX_WIDTH = 620;
+
 export default function YarnStudio() {
   const hoopRef = useRef<HTMLDivElement>(null);
   const clothRef = useRef<HTMLCanvasElement>(null);
@@ -259,7 +262,7 @@ export default function YarnStudio() {
   const lastEasedRef = useRef(0);
 
   useEffect(() => {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
     for (const canvas of [clothRef.current, stitchRef.current, liveRef.current]) {
       if (!canvas || size.w === 0) continue;
       canvas.width = Math.round(size.w * dpr);
@@ -293,6 +296,7 @@ export default function YarnStudio() {
     const totalH = analysisSize.h + pad * 2;
     const sx = size.w / totalW;
     const sy = size.h / totalH;
+    const visualScale = size.w / HOOP_MAX_WIDTH;
     const last = lastEasedRef.current;
     const completeEnd = completeBound(packed, eased);
     const scrubbedBack = eased < last - 0.0005;
@@ -311,6 +315,7 @@ export default function YarnStudio() {
           sy,
           pad,
           pad,
+          visualScale,
         );
       }
     };
@@ -341,11 +346,14 @@ export default function YarnStudio() {
         sy,
         pad,
         pad,
+        visualScale,
       );
     }
     if (eased < 0.98) {
       const needles = collectPackedNeedles(packed, eased);
-      for (const n of needles) drawNeedle(liveCtx, n, sx, sy, pad, pad);
+      for (const n of needles) {
+        drawNeedle(liveCtx, n, sx, sy, pad, pad, visualScale);
+      }
     }
     drawMotes(liveCtx, size.w, size.h, eased);
     lastEasedRef.current = eased;
@@ -401,7 +409,7 @@ export default function YarnStudio() {
             className={`relative mx-auto${siteGround ? " bg-linen" : ""}`}
             style={{
               width: "100%",
-              maxWidth: 620,
+              maxWidth: HOOP_MAX_WIDTH,
               aspectRatio: `${analysisSize.w + pad * 2} / ${analysisSize.h + pad * 2}`,
               overflow: params.fray > 0.04 || siteGround ? "visible" : "hidden",
               ...(siteGround

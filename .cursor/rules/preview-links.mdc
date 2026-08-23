@@ -1,0 +1,14 @@
+---
+description: Always share the Vercel preview URL after visual changes
+alwaysApply: true
+---
+
+# Preview links
+
+After any visual change (UI, layout, CSS, canvas, public assets, or anything the user can see in the browser), include the live preview URL in the wrap-up. Do not wait to be asked.
+
+- Prefer the Vercel Preview URL from the PR — the stable `*-git-*.vercel.app` alias in Vercel’s GitHub comment, or the `environment_url` on the Preview deployment.
+- Also include the PR URL.
+- Do not substitute the Vercel dashboard inspect URL for the actual site.
+- If the preview is still deploying, say so and post the URL as soon as it is Ready.
+- If there is no PR yet, open one so a preview exists, then share that URL.
