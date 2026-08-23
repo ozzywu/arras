@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --linen: #f3efe6;
+  --umber: #3b3228;
+  --dust: #6d5c4c;
+  --flax: #8a6d55;
+  --cream: #f7f1e6;
+}
+
+@theme inline {
+  --color-linen: var(--linen);
+  --color-umber: var(--umber);
+  --color-dust: var(--dust);
+  --color-flax: var(--flax);
+  --font-serif: var(--font-cormorant);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-space-mono);
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  color: var(--umber);
+  background: var(--linen);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+::selection {
+  background: #d7c4a8;
+  color: var(--umber);
+}
+
+.bg-linen {
+  background-color: #f3efe6;
+  background-image: url("/textures/linen.svg");
+  background-repeat: repeat;
+  background-attachment: fixed;
+  background-size: 192px 192px;
+}
