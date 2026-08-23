@@ -4,7 +4,7 @@
 
 ## What this is
 
-A standalone Next.js app. The homepage (`/`) is the hoop: drop a photo, watch it get woven into linen.
+A standalone Next.js app. The homepage (`/`) is the hoop: drop a photo, watch it get woven into linen. **Take this** copies the recipe for an agent or an `/embed` iframe.
 
 This repo is **not** Tosca. Do not add admin, Supabase, or portfolio routes here.
 
@@ -19,9 +19,9 @@ Node.js 22+ is required. Package manager is npm.
 ## Layout
 
 ```
-src/app/                 # App Router — homepage only
-src/components/          # ArrasShell + YarnStudio UI
-src/lib/yarn-loom/       # Stitch engine (analyze, generate, fray, render)
+src/app/                 # App Router — studio homepage + /embed hoop
+src/components/          # ArrasShell, YarnStudio, YarnHoop, TakeThis
+src/lib/yarn-loom/       # Stitch engine (analyze, generate, fray, render, recipe)
 public/                  # Demo sources + linen texture
 ```
 

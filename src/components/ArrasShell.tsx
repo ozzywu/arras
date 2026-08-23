@@ -37,7 +37,8 @@ export function ArrasShell({ children }: { children: React.ReactNode }) {
               fontFamily: "var(--font-geist-sans)",
             }}
           >
-            Drop a photo. It gets woven into the cloth — no account.
+            Drop a photo. It gets woven into the cloth — then copy it onto a
+            site.
           </p>
         </div>
       </header>
