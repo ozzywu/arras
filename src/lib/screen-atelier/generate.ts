@@ -64,7 +64,7 @@ function readResolved(
   const clustered = quantColors[quantIndex[i]] ?? sampled;
   const muted = muteToScreen(mixRgb(sampled, clustered, 0.45 + params.flatten * 0.4), params.aging);
   const ground = groundRgb(params.ground);
-  const keep = clamp(sub * 1.15 - params.flatten * 0.12, 0, 1);
+  const keep = clamp(sub * 1.28 - params.flatten * 0.08, 0, 1);
   let color = mixRgb(ground, muted, keep);
   if (params.goldLeaf > 0.05 && lumOf(sampled) > 188) {
     color = mixRgb(color, { r: 226, g: 198, b: 120 }, params.goldLeaf * 0.35 * keep);
@@ -150,16 +150,16 @@ function buildWashImage(
         data[i + 3] = 0;
         continue;
       }
-      const keep = clamp((resolved.subject - 0.1) / 0.38, 0, 1);
-      if (keep < 0.04) {
+      const keep = clamp((resolved.subject - 0.06) / 0.32, 0, 1);
+      if (keep < 0.03) {
         data[i + 3] = 0;
         continue;
       }
-      const chalk = 1 - params.wetness * 0.25;
+      const chalk = 1 - params.wetness * 0.2;
       data[i] = resolved.color.r * chalk + 18 * (1 - chalk);
       data[i + 1] = resolved.color.g * chalk + 16 * (1 - chalk);
       data[i + 2] = resolved.color.b * chalk + 14 * (1 - chalk);
-      data[i + 3] = Math.round((0.55 + (1 - params.wetness) * 0.38) * keep * 255);
+      data[i + 3] = Math.round((0.78 + (1 - params.wetness) * 0.18) * keep * 255);
     }
   }
   return blurImageData(new ImageData(data, w, h), 0.6 + params.wetness * 1.8);
@@ -258,7 +258,7 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): ScreenBuil
     darkBg,
   );
 
-  const occCell = Math.max(2.6, 4.4 - params.outline * 0.7);
+  const occCell = Math.max(3.8, 6.2 - params.outline * 0.8);
   const occW = Math.ceil(w / occCell);
   const occH = Math.ceil(h / occCell);
   const occ = new Uint8Array(occW * occH);
@@ -267,14 +267,14 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): ScreenBuil
   const magGate =
     maxMag *
     (params.ink === "xieyi"
-      ? 0.22
+      ? 0.28
       : params.ink === "engraved"
-        ? 0.12
-        : 0.16) *
-    (1.2 - params.outline * 0.18);
-  const contourStride = Math.max(2, Math.round(5.2 - params.outline * 1.1));
+        ? 0.16
+        : 0.22) *
+    (1.18 - params.outline * 0.16);
+  const contourStride = Math.max(3, Math.round(7.4 - params.outline * 1.2));
   const contourLen =
-    (params.ink === "engraved" ? 10 : 13) * (0.85 + params.outline * 0.12);
+    (params.ink === "engraved" ? 16 : 24) * (0.85 + params.outline * 0.1);
 
   const inkW =
     (params.ink === "engraved" ? 1.55 : params.ink === "xieyi" ? 0.95 : 1.12) *
@@ -377,8 +377,9 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): ScreenBuil
       if (occ[occupancyIndex(jx, jy, occW, occCell, occ.length)] >= occLimit) {
         continue;
       }
-      const importance = m / maxMag + subject[jy * w + jx] * 0.25;
-      if (importance < 0.18 && rng() > 0.25) continue;
+      const importance = m / maxMag + subject[jy * w + jx] * 0.3;
+      if (importance < 0.28 && rng() > 0.18) continue;
+      if (m < magGate * 1.2 && subject[jy * w + jx] < 0.32) continue;
       traceKind(
         jx + 0.5,
         jy + 0.5,
@@ -392,9 +393,9 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): ScreenBuil
     }
   }
 
-  const veinStride = Math.max(4, Math.round(7.5 - params.flatten * 2.2));
-  const veinGate = maxMag * (0.06 + (1 - params.flatten) * 0.04);
-  if ((params.ink === "engraved" || params.flatten > 0.55) && !lineart) {
+  const veinStride = Math.max(6, Math.round(10 - params.flatten * 2.4));
+  const veinGate = maxMag * (0.08 + (1 - params.flatten) * 0.04);
+  if ((params.ink === "engraved" || params.flatten > 0.78) && !lineart) {
     for (let y = 4; y < h - 4; y += veinStride) {
       for (let x = 4; x < w - 4; x += veinStride) {
         const jx = clamp(x + ((rng() - 0.5) * veinStride) | 0, 3, w - 4);
@@ -424,7 +425,7 @@ export function buildPanel(analysis: Analysis, params: ScreenParams): ScreenBuil
     for (let y = gap; y < h - gap; y += gap) {
       for (let x = gap; x < w - gap; x += gap) {
         const i = y * w + x;
-        if (subject[i] < 0.42) continue;
+        if (subject[i] < 0.58) continue;
         if (mag[i] > maxMag * 0.14) continue;
         if (rng() > params.pattern * 0.85) continue;
         const resolved = readResolved(
