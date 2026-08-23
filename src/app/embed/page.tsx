@@ -9,13 +9,7 @@ export default function EmbedPage() {
   return (
     <Suspense
       fallback={
-        <p
-          className="p-6 text-sm"
-          style={{
-            color: "#6d5c4c",
-            fontFamily: "var(--font-cormorant)",
-          }}
-        >
+        <p className="p-6 font-heading text-sm text-muted-foreground">
           Threading the needle…
         </p>
       }

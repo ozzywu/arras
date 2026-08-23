@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Pause, Play, RotateCcw, Sun, Upload } from "lucide-react";
 import {
   imageUrlOf,
   loomParamsOf,
@@ -17,6 +18,29 @@ import {
   type GrowthMode,
   type LoomParams,
 } from "@/lib/yarn-loom/types";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { TakeThis } from "./TakeThis";
 import {
   YarnHoop,
@@ -104,16 +128,14 @@ export default function YarnStudio() {
   };
 
   const siteGround = params.ground === "site";
+  const edgePreset =
+    EDGE_PRESETS.find((preset) => Math.abs(params.fray - preset.value) < 0.03)
+      ?.label ?? "";
 
   return (
-    <div
-      className="flex flex-col gap-5 lg:flex-row lg:items-start"
-      style={{ fontFamily: "var(--font-geist-sans)", color: "#3b3228" }}
-    >
-      <div className="flex-1 min-w-0">
-        <div
-          className={siteGround ? "-mx-2 sm:mx-0 px-2 py-8 bg-linen" : undefined}
-        >
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <div className="min-w-0 flex-1">
+        <div className={siteGround ? "-mx-2 bg-linen px-2 py-8 sm:mx-0" : undefined}>
           <YarnHoop
             ref={hoopRef}
             recipe={recipe}
@@ -135,325 +157,364 @@ export default function YarnStudio() {
         </div>
       </div>
 
-      <aside
-        className="w-full lg:w-[300px] shrink-0 flex flex-col gap-4 p-4"
-        style={{
-          background: "#efe4d0",
-          border: "1px solid rgba(140,90,50,0.18)",
-        }}
-      >
-        <TakeThis
-          recipe={recipe}
-          hoopRef={hoopRef}
-          customImage={source === "image" && !!imageUrl?.startsWith("blob:")}
-        />
+      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:max-h-[calc(100svh-3rem)] lg:w-[340px] lg:overflow-y-auto">
+        <Card size="sm" className="bg-card/90 shadow-sm">
+          <CardHeader className="border-b">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Studio</CardTitle>
+                <CardDescription>
+                  Source, cloth, and stitch — then take the hoop with you.
+                </CardDescription>
+              </div>
+              <Badge variant={stats.busy ? "secondary" : "outline"}>
+                {stats.busy ? "Threading" : "Ready"}
+              </Badge>
+            </div>
+          </CardHeader>
 
-        <section>
-          <Label>Source</Label>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {SOURCE_PRESETS.map((p) => (
-              <Chip
-                key={p.id}
-                active={source === p.id}
+          <CardContent className="space-y-5">
+            <TakeThis
+              recipe={recipe}
+              hoopRef={hoopRef}
+              customImage={source === "image" && !!imageUrl?.startsWith("blob:")}
+            />
+
+            <Separator />
+
+            <section className="space-y-2.5">
+              <SectionLabel>Source</SectionLabel>
+              <div className="flex flex-wrap items-center gap-2">
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  spacing={0}
+                  value={source === "image" ? "" : source}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    const preset = SOURCE_PRESETS.find((p) => p.id === value);
+                    if (!preset) return;
+                    setSource(preset.id);
+                    setImageUrl(preset.url);
+                  }}
+                  className="flex flex-wrap"
+                >
+                  {SOURCE_PRESETS.map((preset) => (
+                    <ToggleGroupItem key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <Button
+                  type="button"
+                  variant={source === "image" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Upload data-icon="inline-start" />
+                  Upload
+                </Button>
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => onFiles(e.target.files)}
+              />
+            </section>
+
+            <section className="space-y-2.5">
+              <SectionLabel>Ground</SectionLabel>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Site fabric is the compositing target: no baked beige, same weave
+                as the page, hoop and site sharing one cloth.
+              </p>
+              <RadioGroup
+                value={params.ground}
+                onValueChange={(value) => patch("ground", value as GroundMode)}
+                className="gap-2"
+              >
+                {GROUNDS.map((ground) => (
+                  <Label
+                    key={ground.id}
+                    className="flex items-start gap-3 rounded-lg border border-input bg-background/60 p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                  >
+                    <RadioGroupItem value={ground.id} className="mt-0.5" />
+                    <span className="space-y-0.5">
+                      <span className="block text-sm font-medium">
+                        {ground.label}
+                      </span>
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {ground.hint}
+                      </span>
+                    </span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </section>
+
+            <section className="space-y-2.5">
+              <SectionLabel>Edge</SectionLabel>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Tight clips to a hem. Unravelled overshoots, yaws off-grain, and
+                leaves stray fibers on the cloth.
+              </p>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                spacing={0}
+                value={edgePreset}
+                onValueChange={(label) => {
+                  const preset = EDGE_PRESETS.find((item) => item.label === label);
+                  if (preset) patch("fray", preset.value);
+                }}
+              >
+                {EDGE_PRESETS.map((preset) => (
+                  <ToggleGroupItem key={preset.label} value={preset.label}>
+                    {preset.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <ParamSlider
+                label="Fray"
+                min={0}
+                max={1}
+                step={0.01}
+                value={params.fray}
+                onChange={(value) => patch("fray", value)}
+                display={
+                  params.fray < 0.08
+                    ? "hemmed"
+                    : params.fray > 0.72
+                      ? "unravelled"
+                      : `${Math.round(params.fray * 100)}%`
+                }
+              />
+            </section>
+
+            <section className="space-y-2.5">
+              <SectionLabel>Growth</SectionLabel>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                spacing={0}
+                value={params.growth}
+                onValueChange={(value) => {
+                  if (value) patch("growth", value as GrowthMode);
+                }}
+                className="grid w-full grid-cols-2"
+              >
+                {GROWTH.map((mode) => (
+                  <ToggleGroupItem
+                    key={mode.id}
+                    value={mode.id}
+                    title={mode.hint}
+                    className="h-auto flex-col items-start gap-0.5 whitespace-normal px-2.5 py-2"
+                  >
+                    <span>{mode.label}</span>
+                    <span className="text-[10px] font-normal text-muted-foreground">
+                      {mode.hint}
+                    </span>
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </section>
+
+            <ParamSlider
+              label="Density"
+              min={0.5}
+              max={1}
+              step={0.01}
+              value={params.density}
+              onChange={(value) => patch("density", value)}
+              display={`${Math.round(params.density * 100)}%`}
+            />
+            <ParamSlider
+              label="Stitch length"
+              min={4}
+              max={14}
+              step={0.1}
+              value={params.stitchLength}
+              onChange={(value) => patch("stitchLength", value)}
+            />
+            <ParamSlider
+              label="Floss weight"
+              min={0.8}
+              max={3.2}
+              step={0.05}
+              value={params.thickness}
+              onChange={(value) => patch("thickness", value)}
+            />
+
+            <div className="flex items-center justify-between gap-3">
+              <SectionLabel>Light</SectionLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="outline" size="sm">
+                    <Sun data-icon="inline-start" />
+                    Edit light
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-56">
+                  <PopoverHeader>
+                    <PopoverTitle>Light direction</PopoverTitle>
+                    <PopoverDescription>
+                      Drag the lamp around the hoop
+                    </PopoverDescription>
+                  </PopoverHeader>
+                  <LightOrbit
+                    angle={params.lightAngle}
+                    onChange={(value) => patch("lightAngle", value)}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <ParamSlider
+              label="Duration"
+              min={4000}
+              max={28000}
+              step={250}
+              value={params.durationMs}
+              onChange={(value) => patch("durationMs", value)}
+              display={`${(params.durationMs / 1000).toFixed(1)}s`}
+            />
+
+            <section className="space-y-2.5">
+              <SectionLabel>Color</SectionLabel>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                spacing={0}
+                value={params.colorMode}
+                onValueChange={(value) => {
+                  if (value) patch("colorMode", value as ColorMode);
+                }}
+              >
+                <ToggleGroupItem value="sampled">Sampled</ToggleGroupItem>
+                <ToggleGroupItem value="sunbleached">
+                  Sun-bleached
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </section>
+          </CardContent>
+
+          <CardFooter className="flex-col items-stretch gap-3">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                className="flex-1"
                 onClick={() => {
-                  setSource(p.id);
-                  setImageUrl(p.url);
+                  if (play.t >= 1) {
+                    play.setT(0);
+                    play.setPlaying(true);
+                    return;
+                  }
+                  play.setPlaying((playing) => !playing);
                 }}
               >
-                {p.label}
-              </Chip>
-            ))}
-            <Chip
-              active={source === "image"}
-              onClick={() => fileRef.current?.click()}
-            >
-              Upload
-            </Chip>
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => onFiles(e.target.files)}
-          />
-        </section>
-
-        <section>
-          <Label>Ground</Label>
-          <p className="text-[11px] mt-1 mb-2" style={{ color: "#8a6d55" }}>
-            Site fabric is the compositing target: no baked beige, same weave
-            as the page, hoop and site sharing one cloth.
-          </p>
-          <div className="grid grid-cols-1 gap-2">
-            {GROUNDS.map((g) => (
-              <button
-                key={g.id}
+                {play.playing ? (
+                  <Pause data-icon="inline-start" />
+                ) : (
+                  <Play data-icon="inline-start" />
+                )}
+                {play.playing ? "Pause" : play.t >= 1 ? "Replay" : "Play"}
+              </Button>
+              <Button
                 type="button"
-                onClick={() => patch("ground", g.id)}
-                className="text-left px-2 py-2 text-xs"
-                style={{
-                  background: params.ground === g.id ? "#4a7ec7" : "#e8dcc8",
-                  color: params.ground === g.id ? "#f7f1e6" : "#3b3228",
+                variant="outline"
+                onClick={() => {
+                  play.setT(0);
+                  play.setPlaying(true);
                 }}
               >
-                <span className="block font-medium">{g.label}</span>
-                <span className="opacity-80">{g.hint}</span>
-              </button>
-            ))}
-          </div>
-        </section>
+                <RotateCcw data-icon="inline-start" />
+                Rewind
+              </Button>
+            </div>
 
-        <section>
-          <Label>Edge</Label>
-          <p className="text-[11px] mt-1 mb-2" style={{ color: "#8a6d55" }}>
-            Tight clips to a hem. Unravelled overshoots, yaws off-grain, and
-            leaves stray fibers on the cloth.
-          </p>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {EDGE_PRESETS.map((preset) => (
-              <Chip
-                key={preset.label}
-                active={Math.abs(params.fray - preset.value) < 0.03}
-                onClick={() => patch("fray", preset.value)}
-              >
-                {preset.label}
-              </Chip>
-            ))}
-          </div>
-          <Slider
-            label="Fray"
-            min={0}
-            max={1}
-            step={0.01}
-            value={params.fray}
-            onChange={(v) => patch("fray", v)}
-            display={
-              params.fray < 0.08
-                ? "hemmed"
-                : params.fray > 0.72
-                  ? "unravelled"
-                  : `${Math.round(params.fray * 100)}%`
-            }
-          />
-        </section>
+            <Slider
+              min={0}
+              max={1}
+              step={0.001}
+              value={[play.t]}
+              onValueChange={([value]) => {
+                play.setPlaying(false);
+                play.setT(value);
+              }}
+              aria-label="Playhead"
+            />
 
-        <section>
-          <Label>Growth</Label>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {GROWTH.map((g) => (
-              <button
-                key={g.id}
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-mono text-xs tabular-nums text-muted-foreground">
+                {stats.stitchCount.toLocaleString()} stitches · {stats.passages}{" "}
+                passages
+                {stats.busy ? " · threading" : ""}
+              </p>
+              <Button
                 type="button"
-                onClick={() => patch("growth", g.id)}
-                className="text-left px-2 py-2 text-xs"
-                style={{
-                  background: params.growth === g.id ? "#4a7ec7" : "#e8dcc8",
-                  color: params.growth === g.id ? "#f7f1e6" : "#3b3228",
-                }}
-                title={g.hint}
+                variant="ghost"
+                size="xs"
+                onClick={() => patch("seed", params.seed + 1)}
               >
-                <span className="block font-medium">{g.label}</span>
-                <span className="opacity-80">{g.hint}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <Slider
-          label="Density"
-          min={0.5}
-          max={1}
-          step={0.01}
-          value={params.density}
-          onChange={(v) => patch("density", v)}
-          display={`${Math.round(params.density * 100)}%`}
-        />
-        <Slider
-          label="Stitch length"
-          min={4}
-          max={14}
-          step={0.1}
-          value={params.stitchLength}
-          onChange={(v) => patch("stitchLength", v)}
-        />
-        <Slider
-          label="Floss weight"
-          min={0.8}
-          max={3.2}
-          step={0.05}
-          value={params.thickness}
-          onChange={(v) => patch("thickness", v)}
-        />
-        <LightEditor
-          angle={params.lightAngle}
-          onChange={(v) => patch("lightAngle", v)}
-        />
-        <Slider
-          label="Duration"
-          min={4000}
-          max={28000}
-          step={250}
-          value={params.durationMs}
-          onChange={(v) => patch("durationMs", v)}
-          display={`${(params.durationMs / 1000).toFixed(1)}s`}
-        />
-
-        <section>
-          <Label>Color</Label>
-          <div className="flex gap-2 mt-2">
-            {(["sampled", "sunbleached"] as ColorMode[]).map((m) => (
-              <Chip
-                key={m}
-                active={params.colorMode === m}
-                onClick={() => patch("colorMode", m)}
-              >
-                {m === "sampled" ? "Sampled" : "Sun-bleached"}
-              </Chip>
-            ))}
-          </div>
-        </section>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (play.t >= 1) {
-                play.setT(0);
-                play.setPlaying(true);
-                return;
-              }
-              play.setPlaying((p) => !p);
-            }}
-            className="flex-1 py-2 text-sm"
-            style={{ background: "#4a7ec7", color: "#f7f1e6" }}
-          >
-            {play.playing ? "Pause" : play.t >= 1 ? "Replay" : "Play"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              play.setT(0);
-              play.setPlaying(true);
-            }}
-            className="px-3 py-2 text-sm"
-            style={{ background: "#e8dcc8" }}
-          >
-            Rewind
-          </button>
-        </div>
-
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.001}
-          value={play.t}
-          onChange={(e) => {
-            play.setPlaying(false);
-            play.setT(Number(e.target.value));
-          }}
-          aria-label="Playhead"
-          className="w-full"
-        />
-
-        <p
-          className="text-xs tabular-nums"
-          style={{ fontFamily: "var(--font-space-mono)", color: "#8a6d55" }}
-        >
-          {stats.stitchCount.toLocaleString()} stitches · {stats.passages}{" "}
-          passages
-          {stats.busy ? " · threading" : ""}
-        </p>
-
-        <button
-          type="button"
-          onClick={() => patch("seed", params.seed + 1)}
-          className="text-xs self-start underline underline-offset-4"
-          style={{ color: "#6d5c4c" }}
-        >
-          Re-thread with a new seed
-        </button>
+                New seed
+              </Button>
+            </div>
+          </CardFooter>
+        </Card>
       </aside>
     </div>
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="text-[11px] tracking-[0.18em] uppercase"
-      style={{ color: "#8a6d55" }}
-    >
+    <div className="text-[11px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
       {children}
     </div>
   );
 }
 
-function LightEditor({
-  angle,
+function ParamSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
   onChange,
+  display,
 }: {
-  angle: number;
-  onChange: (angle: number) => void;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+  display?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDoc);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDoc);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   return (
-    <div ref={rootRef} className="relative">
-      <div className="flex items-center justify-between gap-2">
-        <Label>Light</Label>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          onClick={() => setOpen((v) => !v)}
-          className="px-3 py-1.5 text-xs"
-          style={{
-            background: open ? "#4a7ec7" : "#e8dcc8",
-            color: open ? "#f7f1e6" : "#3b3228",
-          }}
-        >
-          Edit light
-        </button>
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label className="text-[11px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+          {label}
+        </Label>
+        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+          {display ?? value.toFixed(2)}
+        </span>
       </div>
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Light direction"
-          className="absolute left-0 right-0 z-20 mt-2 p-3"
-          style={{
-            background: "#f7f1e6",
-            border: "1px solid rgba(140,90,50,0.22)",
-            boxShadow: "0 10px 28px rgba(70,40,20,0.12)",
-          }}
-        >
-          <p
-            className="text-[11px] mb-2 text-center"
-            style={{ color: "#8a6d55" }}
-          >
-            Drag the lamp around the hoop
-          </p>
-          <LightOrbit angle={angle} onChange={onChange} />
-        </div>
-      )}
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={([next]) => onChange(next)}
+        aria-label={label}
+      />
     </div>
   );
 }
@@ -493,8 +554,8 @@ function LightOrbit({
       ref={svgRef}
       width="100%"
       viewBox={`0 0 ${size} ${size}`}
-      className="block mx-auto cursor-crosshair select-none"
-      style={{ maxWidth: 168, touchAction: "none" }}
+      className="mx-auto block max-w-[168px] cursor-crosshair select-none"
+      style={{ touchAction: "none" }}
       aria-label="Light orbit"
       onPointerDown={(e) => {
         dragging.current = true;
@@ -514,7 +575,7 @@ function LightOrbit({
         cy={cy}
         r={radius}
         fill="none"
-        stroke="rgba(140,90,50,0.28)"
+        stroke="var(--border)"
         strokeWidth="1.2"
         strokeDasharray="3 3"
       />
@@ -523,7 +584,7 @@ function LightOrbit({
         y1={lampY}
         x2={cx}
         y2={cy}
-        stroke="rgba(74,126,199,0.45)"
+        stroke="color-mix(in oklch, var(--primary) 45%, transparent)"
         strokeWidth="1"
       />
       <circle
@@ -561,70 +622,5 @@ function LightOrbit({
         );
       })}
     </svg>
-  );
-}
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="px-3 py-1.5 text-xs"
-      style={{
-        background: active ? "#4a7ec7" : "#e8dcc8",
-        color: active ? "#f7f1e6" : "#3b3228",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  display,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-  display?: string;
-}) {
-  return (
-    <label className="block">
-      <div className="flex justify-between mb-1">
-        <Label>{label}</Label>
-        <span
-          className="text-[11px] tabular-nums"
-          style={{ fontFamily: "var(--font-space-mono)", color: "#8a6d55" }}
-        >
-          {display ?? value.toFixed(2)}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full"
-      />
-    </label>
   );
 }

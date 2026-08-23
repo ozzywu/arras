@@ -1,12 +1,16 @@
 "use client";
 
 import { useRef, useState, type RefObject } from "react";
+import { AppWindow, Bot, Code2, ImageDown } from "lucide-react";
 import {
   agentPrompt,
   embedSnippet,
   reactSnippet,
   type ArrasRecipe,
 } from "@/lib/yarn-loom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { YarnHoopHandle } from "./YarnHoop";
 
 type Copied = "agent" | "embed" | "react" | "png" | null;
@@ -77,36 +81,29 @@ export function TakeThis({
   };
 
   return (
-    <section
-      className="flex flex-col gap-2 pb-3"
-      style={{ borderBottom: "1px solid rgba(140,90,50,0.18)" }}
-    >
-      <div
-        className="text-[11px] tracking-[0.18em] uppercase"
-        style={{ color: "#8a6d55" }}
-      >
-        Take this
+    <div className="flex flex-col gap-3">
+      <div>
+        <h3 className="text-[11px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+          Take this
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          Copy the hoop for an agent, paste an embed, or save a PNG. On a phone,
+          Save Image in the share sheet is the camera roll.
+        </p>
       </div>
-      <p className="text-[11px] leading-snug" style={{ color: "#8a6d55" }}>
-        Like the hoop? Copy it for your agent, paste an embed, or save a PNG to
-        Downloads — on a phone, Save Image in the share sheet is the camera
-        roll.
-      </p>
 
-      <button
-        type="button"
+      <Button
+        className="w-full"
         onClick={() => void copyText("agent", agentPrompt(origin, recipe))}
-        className="py-2 text-sm"
-        style={{ background: "#4a7ec7", color: "#f7f1e6" }}
       >
+        <Bot data-icon="inline-start" />
         {copied === "agent" ? "Copied for your agent" : "Copy for agent"}
-      </button>
+      </Button>
 
       <div className="grid grid-cols-2 gap-2">
-        <MiniButton
-          active={copied === "embed"}
+        <Button
+          variant="outline"
           disabled={!iframeOk}
-          onClick={() => void copyText("embed", embedSnippet(origin, recipe))}
           title={
             iframeOk
               ? "Copy an iframe that plays this recipe on Arras"
@@ -114,91 +111,57 @@ export function TakeThis({
                 ? "Iframe cannot carry a local photo — use Copy for agent"
                 : "Site fabric has to live in your page — use Copy for agent"
           }
+          onClick={() => void copyText("embed", embedSnippet(origin, recipe))}
         >
+          <AppWindow data-icon="inline-start" />
           {copied === "embed" ? "Copied" : "Embed"}
-        </MiniButton>
-        <MiniButton
-          active={copied === "react"}
-          onClick={() => void copyText("react", reactSnippet(recipe))}
+        </Button>
+        <Button
+          variant="outline"
           title="Copy a YarnHoop JSX snippet"
+          onClick={() => void copyText("react", reactSnippet(recipe))}
         >
+          <Code2 data-icon="inline-start" />
           {copied === "react" ? "Copied" : "React"}
-        </MiniButton>
+        </Button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => void savePng()}
-        className="py-2 text-sm"
-        style={{ background: "#e8dcc8", color: "#3b3228" }}
+      <Button
+        variant="secondary"
+        className="w-full"
         title="Downloads on a computer. On a phone, Save Image in the share sheet puts it on the camera roll."
+        onClick={() => void savePng()}
       >
+        <ImageDown data-icon="inline-start" />
         {copied === "png" ? "Saved" : "Save PNG"}
-      </button>
+      </Button>
 
-      <p
-        className="text-[11px] leading-snug"
-        style={{ color: "#8a6d55" }}
-        aria-live="polite"
-      >
-        {error
-          ? error
-          : customImage
+      {error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : (
+        <p className="text-xs leading-relaxed text-muted-foreground" aria-live="polite">
+          {customImage
             ? "Your photo stays in this tab. Save PNG still writes the hoop to Downloads or the camera roll."
             : recipe.ground === "site"
               ? "Site fabric is stitches on your page — Copy for agent inlines them. Save PNG keeps a linen-backed still."
               : "Save PNG goes to Downloads, or the camera roll from a phone share sheet."}
-      </p>
+        </p>
+      )}
+
       {dump && (
-        <textarea
+        <Textarea
           ref={dumpRef}
           readOnly
           aria-label={dump.label}
           value={dump.text}
           rows={8}
-          className="w-full text-[10px] p-2"
-          style={{
-            fontFamily: "var(--font-space-mono)",
-            color: "#3b3228",
-            background: "#f7f1e6",
-            border: "1px solid rgba(140,90,50,0.22)",
-            resize: "vertical",
-          }}
+          className="font-mono text-[10px] leading-snug"
           onFocus={(e) => e.currentTarget.select()}
         />
       )}
-    </section>
-  );
-}
-
-function MiniButton({
-  active,
-  disabled,
-  onClick,
-  title,
-  children,
-}: {
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      title={title}
-      onClick={onClick}
-      className="py-2 text-[11px]"
-      style={{
-        background: active ? "#4a7ec7" : "#e8dcc8",
-        color: active ? "#f7f1e6" : "#3b3228",
-        opacity: disabled ? 0.45 : 1,
-      }}
-    >
-      {children}
-    </button>
+    </div>
   );
 }
 
