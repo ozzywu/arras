@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --app: #f4f4f5;
+  --app: #f2f2f7;
   --card: #ffffff;
   --ink: #111111;
   --muted: #717171;
@@ -138,12 +138,16 @@ body {
 
 .preview-frame {
   --preview-aspect: 0.82;
-  width: min(100%, 620px, calc(52dvh * var(--preview-aspect)));
+  width: min(100%, 620px, calc((56dvh - 3.5rem) * var(--preview-aspect)));
+}
+
+.preview-stage {
+  width: 100%;
   aspect-ratio: var(--preview-aspect);
 }
 
 @media (min-width: 1024px) {
   .preview-frame {
-    width: min(100%, 620px, calc(78vh * var(--preview-aspect)));
+    width: min(100%, 620px, calc((78vh - 3.5rem) * var(--preview-aspect)));
   }
 }

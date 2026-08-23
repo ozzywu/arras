@@ -325,7 +325,7 @@ export default function YarnStudio() {
       ?.id ?? "lived-in";
 
   const stageFill = siteGround
-    ? "#f6f6f6"
+    ? "#ffffff"
     : params.ground === "linen"
       ? LINEN.base
       : "#cbb79a";
@@ -334,16 +334,16 @@ export default function YarnStudio() {
     <div className="studio h-full lg:h-auto lg:max-w-[1180px] lg:mx-auto lg:px-8 lg:pb-16 flex flex-col lg:flex-row lg:items-start lg:gap-10">
       <section className="shrink-0 px-4 pb-3 lg:flex-1 lg:px-0 lg:sticky lg:top-6">
         <div
-          className="preview-frame mx-auto overflow-hidden rounded-[24px] bg-card"
+          className="preview-frame mx-auto overflow-hidden rounded-[24px] bg-white flex flex-col"
           style={{
             ["--preview-aspect" as string]: String(aspect),
             boxShadow:
-              "0 1px 2px rgba(0,0,0,0.04), 0 12px 32px rgba(0,0,0,0.08)",
+              "0 0 0 1px rgba(0,0,0,0.06), 0 12px 40px rgba(0,0,0,0.10)",
           }}
         >
           <div
             ref={hoopRef}
-            className="relative w-full h-full"
+            className="preview-stage relative"
             title="Drop an image"
             style={{ background: stageFill }}
             onDragOver={(e) => {
@@ -360,35 +360,35 @@ export default function YarnStudio() {
             <canvas ref={clothRef} className="absolute inset-0 h-full w-full" />
             <canvas ref={stitchRef} className="absolute inset-0 h-full w-full" />
             <canvas ref={liveRef} className="absolute inset-0 h-full w-full" />
-            <Transport
-              playing={playing}
-              t={t}
-              busy={busy}
-              stitchCount={stitches.length}
-              passages={passages}
-              onToggle={() => {
-                if (t >= 1) {
-                  setT(0);
-                  setPlaying(true);
-                  return;
-                }
-                setPlaying((p) => !p);
-              }}
-              onRewind={() => {
-                setT(0);
-                setPlaying(true);
-              }}
-              onScrub={(next) => {
-                setPlaying(false);
-                setT(next);
-              }}
-            />
             {dropOver ? (
-              <div className="absolute inset-0 grid place-items-center bg-white/70 text-[15px] font-medium">
+              <div className="absolute inset-0 grid place-items-center bg-white/70 text-[15px] font-medium z-10">
                 Drop photo
               </div>
             ) : null}
           </div>
+          <Transport
+            playing={playing}
+            t={t}
+            busy={busy}
+            stitchCount={stitches.length}
+            passages={passages}
+            onToggle={() => {
+              if (t >= 1) {
+                setT(0);
+                setPlaying(true);
+                return;
+              }
+              setPlaying((p) => !p);
+            }}
+            onRewind={() => {
+              setT(0);
+              setPlaying(true);
+            }}
+            onScrub={(next) => {
+              setPlaying(false);
+              setT(next);
+            }}
+          />
         </div>
       </section>
 
@@ -397,7 +397,9 @@ export default function YarnStudio() {
           <div className="w-10 h-1 rounded-full bg-[#d4d4d4]" />
         </div>
         <div className="sheet-scroll flex-1 min-h-0 overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2 lg:px-5 lg:py-6 flex flex-col gap-6">
-          <div className="thumb-row flex gap-2.5 overflow-x-auto pb-1">
+          <div>
+            <div className="text-[13px] font-medium text-muted mb-2">Photo</div>
+            <div className="thumb-row flex gap-2.5 overflow-x-auto pb-1">
             {PRESETS.map((preset) => (
               <SourceTile
                 key={preset.id}
@@ -442,6 +444,7 @@ export default function YarnStudio() {
                 </span>
               )}
             </SourceTile>
+          </div>
           </div>
 
           <Segmented

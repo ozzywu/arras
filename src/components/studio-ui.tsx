@@ -215,8 +215,8 @@ export function Transport({
   const playLabel = playing ? "Pause" : ended ? "Replay" : "Play";
 
   return (
-    <div className="absolute inset-x-0 bottom-0 pt-10 pb-3 px-3 bg-gradient-to-t from-black/55 to-transparent">
-      <div className="flex items-center gap-2">
+    <div className="bg-black/80 px-2.5 py-2">
+      <div className="flex items-center gap-1.5">
         <button
           type="button"
           aria-label="Rewind"
@@ -230,7 +230,7 @@ export function Transport({
           aria-label={playLabel}
           disabled={busy}
           onClick={onToggle}
-          className="grid place-items-center h-10 w-10 shrink-0 rounded-full bg-white text-ink"
+          className="grid place-items-center h-9 w-9 shrink-0 rounded-full bg-white text-ink"
         >
           {playing ? <IconPause /> : ended ? <IconReplay /> : <IconPlay />}
         </button>
@@ -246,7 +246,7 @@ export function Transport({
           className="loom-range loom-range-light flex-1"
         />
       </div>
-      <p className="mt-1.5 pl-1 text-[12px] tabular-nums text-white/80">
+      <p className="mt-0.5 px-2 text-[11px] tabular-nums text-white/70">
         {busy
           ? "Threading…"
           : `${stitchCount.toLocaleString()} stitches · ${passages} passages`}
