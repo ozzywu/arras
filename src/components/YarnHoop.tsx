@@ -30,6 +30,7 @@ import {
   type WeaveParams,
 } from "@/lib/yarn-loom";
 import { LINEN, type LoomParams } from "@/lib/yarn-loom/types";
+import { Badge } from "@/components/ui/badge";
 
 /** Desktop hoop width. Floss is tuned here; phones scale thickness to match. */
 export const HOOP_MAX_WIDTH = 620;
@@ -415,17 +416,12 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
                 : "transparent",
             }}
           >
-            <span
-              className="text-sm tracking-wide"
-              style={{
-                fontFamily: "var(--font-cormorant)",
-                color: "#4a3728",
-                background: "rgba(232,220,200,0.72)",
-                padding: "6px 14px",
-              }}
+            <Badge
+              variant="secondary"
+              className="h-auto rounded-md px-3 py-1.5 font-heading text-sm font-normal tracking-wide text-foreground"
             >
               {dropOver ? "Drop image onto the linen" : "Threading the needle…"}
-            </span>
+            </Badge>
           </div>
         )}
       </div>

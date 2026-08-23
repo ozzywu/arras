@@ -5,13 +5,7 @@ export default function HomePage() {
   return (
     <Suspense
       fallback={
-        <p
-          className="text-sm"
-          style={{
-            color: "#6d5c4c",
-            fontFamily: "var(--font-cormorant)",
-          }}
-        >
+        <p className="font-heading text-sm text-muted-foreground">
           Threading the needle…
         </p>
       }
