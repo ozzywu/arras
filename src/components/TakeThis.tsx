@@ -60,24 +60,20 @@ export function TakeThis({
     }
   };
 
-  const copyPng = async () => {
+  const savePng = async () => {
     const blob = await hoopRef.current?.capturePng();
     if (!blob) {
-      setError("Still threading — wait for the hoop, then copy.");
+      setError("Still threading — wait for the hoop, then save.");
       return;
     }
-    const clipOk = await tryCopyPng(blob);
-    if (clipOk) {
+    const filename = `arras-${recipe.source}.png`;
+    try {
+      await savePngToDevice(blob, filename);
       flash("png");
-      return;
+    } catch (err) {
+      if (isAbort(err)) return;
+      setError("Could not save the PNG. Try again when the hoop is still.");
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "arras-subject.png";
-    a.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    flash("png");
   };
 
   return (
@@ -92,8 +88,9 @@ export function TakeThis({
         Take this
       </div>
       <p className="text-[11px] leading-snug" style={{ color: "#8a6d55" }}>
-        Like the hoop? One click copies a prompt for your coding agent, or an
-        embed you can paste on a site.
+        Like the hoop? Copy it for your agent, paste an embed, or save a PNG to
+        Downloads — on a phone, Save Image in the share sheet is the camera
+        roll.
       </p>
 
       <button
@@ -105,7 +102,7 @@ export function TakeThis({
         {copied === "agent" ? "Copied for your agent" : "Copy for agent"}
       </button>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <MiniButton
           active={copied === "embed"}
           disabled={!iframeOk}
@@ -127,14 +124,17 @@ export function TakeThis({
         >
           {copied === "react" ? "Copied" : "React"}
         </MiniButton>
-        <MiniButton
-          active={copied === "png"}
-          onClick={() => void copyPng()}
-          title="Copy a PNG still of the hoop (transparent on site fabric)"
-        >
-          {copied === "png" ? "Copied" : "PNG"}
-        </MiniButton>
       </div>
+
+      <button
+        type="button"
+        onClick={() => void savePng()}
+        className="py-2 text-sm"
+        style={{ background: "#e8dcc8", color: "#3b3228" }}
+        title="Downloads on a computer. On a phone, Save Image in the share sheet puts it on the camera roll."
+      >
+        {copied === "png" ? "Saved" : "Save PNG"}
+      </button>
 
       <p
         className="text-[11px] leading-snug"
@@ -144,10 +144,10 @@ export function TakeThis({
         {error
           ? error
           : customImage
-            ? "Your photo stays in this tab. The agent prompt tells it to attach the same file."
+            ? "Your photo stays in this tab. Save PNG still writes the hoop to Downloads or the camera roll."
             : recipe.ground === "site"
-              ? "Site fabric is stitches on your page — paste Copy for agent into Cursor on that repo."
-              : "Embed hosts the hoop on Arras. React / agent copies the engine into your repo."}
+              ? "Site fabric is stitches on your page — Copy for agent inlines them. Save PNG keeps a linen-backed still."
+              : "Save PNG goes to Downloads, or the camera roll from a phone share sheet."}
       </p>
       {dump && (
         <textarea
@@ -228,18 +228,45 @@ async function tryCopyText(text: string): Promise<boolean> {
   }
 }
 
-async function tryCopyPng(blob: Blob): Promise<boolean> {
-  if (!navigator.clipboard?.write) return false;
-  try {
-    const item = new ClipboardItem({ "image/png": blob });
-    const copied = await race(
-      navigator.clipboard.write([item]).then(() => true),
-      900,
-    );
-    return copied;
-  } catch {
-    return false;
+async function savePngToDevice(blob: Blob, filename: string): Promise<void> {
+  const file = new File([blob], filename, { type: "image/png" });
+  if (preferShareSheet() && canShareFile(file)) {
+    await navigator.share({
+      files: [file],
+      title: "Arras hoop",
+    });
+    return;
   }
+  downloadBlob(blob, filename);
+}
+
+function preferShareSheet(): boolean {
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const appleTouch = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  return coarse || appleTouch;
+}
+
+function canShareFile(file: File): boolean {
+  return (
+    typeof navigator.share === "function" &&
+    (typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] }))
+  );
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function isAbort(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
 }
 
 function race(promise: Promise<boolean>, ms: number): Promise<boolean> {

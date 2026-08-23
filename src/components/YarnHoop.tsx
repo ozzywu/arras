@@ -353,7 +353,11 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
     ]);
 
     useImperativeHandle(ref, () => ({
-      capturePng: () => captureCanvases([clothRef.current, stitchRef.current, liveRef.current]),
+      capturePng: () =>
+        captureCanvases(
+          [clothRef.current, stitchRef.current, liveRef.current],
+          params.ground === "site" ? LINEN.base : null,
+        ),
     }));
 
     return (
@@ -528,6 +532,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 async function captureCanvases(
   canvases: (HTMLCanvasElement | null)[],
+  fill: string | null = null,
 ): Promise<Blob | null> {
   const layers = canvases.filter((c): c is HTMLCanvasElement => !!c && c.width > 0);
   const first = layers[0];
@@ -537,6 +542,10 @@ async function captureCanvases(
   out.height = first.height;
   const ctx = out.getContext("2d");
   if (!ctx) return null;
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, 0, out.width, out.height);
+  }
   for (const layer of layers) ctx.drawImage(layer, 0, 0);
   return new Promise((resolve) => {
     out.toBlob((blob) => resolve(blob), "image/png");
