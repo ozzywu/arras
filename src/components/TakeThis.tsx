@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import {
   agentPrompt,
   embedSnippet,
@@ -22,6 +22,8 @@ export function TakeThis({
 }) {
   const [copied, setCopied] = useState<Copied>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dump, setDump] = useState<{ label: string; text: string } | null>(null);
+  const dumpRef = useRef<HTMLTextAreaElement>(null);
 
   const flash = (which: Copied) => {
     setCopied(which);
@@ -33,12 +35,23 @@ export function TakeThis({
   const iframeOk = recipe.ground !== "site" && !customImage;
 
   const copyText = async (which: Copied, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await tryCopyText(text);
+    if (ok) {
+      setDump(null);
       flash(which);
-    } catch {
-      setError("Clipboard blocked — select the text from a prompt dump instead.");
+      return;
     }
+    setDump({
+      label:
+        which === "agent"
+          ? "Agent prompt"
+          : which === "embed"
+            ? "Iframe embed"
+            : "React snippet",
+      text,
+    });
+    setError("Clipboard blocked in this browser — the text is selected below.");
+    window.setTimeout(() => dumpRef.current?.select(), 0);
   };
 
   const copyPng = async () => {
@@ -47,20 +60,18 @@ export function TakeThis({
       setError("Still threading — wait for the hoop, then copy.");
       return;
     }
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({ "image/png": blob }),
-      ]);
+    const clipOk = await tryCopyPng(blob);
+    if (clipOk) {
       flash("png");
-    } catch {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "arras-subject.png";
-      a.click();
-      URL.revokeObjectURL(url);
-      flash("png");
+      return;
     }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "arras-subject.png";
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flash("png");
   };
 
   return (
@@ -81,7 +92,7 @@ export function TakeThis({
 
       <button
         type="button"
-        onClick={() => copyText("agent", agentPrompt(origin, recipe))}
+        onClick={() => void copyText("agent", agentPrompt(origin, recipe))}
         className="py-2 text-sm"
         style={{ background: "#4a7ec7", color: "#f7f1e6" }}
       >
@@ -92,7 +103,7 @@ export function TakeThis({
         <MiniButton
           active={copied === "embed"}
           disabled={!iframeOk}
-          onClick={() => copyText("embed", embedSnippet(origin, recipe))}
+          onClick={() => void copyText("embed", embedSnippet(origin, recipe))}
           title={
             iframeOk
               ? "Copy an iframe that plays this recipe on Arras"
@@ -105,7 +116,7 @@ export function TakeThis({
         </MiniButton>
         <MiniButton
           active={copied === "react"}
-          onClick={() => copyText("react", reactSnippet(recipe))}
+          onClick={() => void copyText("react", reactSnippet(recipe))}
           title="Copy a YarnHoop JSX snippet"
         >
           {copied === "react" ? "Copied" : "React"}
@@ -119,17 +130,36 @@ export function TakeThis({
         </MiniButton>
       </div>
 
-      <p className="text-[11px] leading-snug" style={{ color: "#8a6d55" }}>
-        {customImage
-          ? "Your photo stays in this tab. The agent prompt tells it to attach the same file."
-          : recipe.ground === "site"
-            ? "Site fabric is stitches on your page — paste Copy for agent into Cursor on that repo."
-            : "Embed hosts the hoop on Arras. React / agent copies the engine into your repo."}
+      <p
+        className="text-[11px] leading-snug"
+        style={{ color: "#8a6d55" }}
+        aria-live="polite"
+      >
+        {error
+          ? error
+          : customImage
+            ? "Your photo stays in this tab. The agent prompt tells it to attach the same file."
+            : recipe.ground === "site"
+              ? "Site fabric is stitches on your page — paste Copy for agent into Cursor on that repo."
+              : "Embed hosts the hoop on Arras. React / agent copies the engine into your repo."}
       </p>
-      {error && (
-        <p className="text-[11px]" style={{ color: "#8a3b2a" }}>
-          {error}
-        </p>
+      {dump && (
+        <textarea
+          ref={dumpRef}
+          readOnly
+          aria-label={dump.label}
+          value={dump.text}
+          rows={8}
+          className="w-full text-[10px] p-2"
+          style={{
+            fontFamily: "var(--font-space-mono)",
+            color: "#3b3228",
+            background: "#f7f1e6",
+            border: "1px solid rgba(140,90,50,0.22)",
+            resize: "vertical",
+          }}
+          onFocus={(e) => e.currentTarget.select()}
+        />
       )}
     </section>
   );
@@ -164,4 +194,55 @@ function MiniButton({
       {children}
     </button>
   );
+}
+
+async function tryCopyText(text: string): Promise<boolean> {
+  const api = navigator.clipboard?.writeText?.(text);
+  if (api) {
+    const copied = await race(api.then(() => true), 900);
+    if (copied) return true;
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+async function tryCopyPng(blob: Blob): Promise<boolean> {
+  if (!navigator.clipboard?.write) return false;
+  try {
+    const item = new ClipboardItem({ "image/png": blob });
+    const copied = await race(
+      navigator.clipboard.write([item]).then(() => true),
+      900,
+    );
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
+function race(promise: Promise<boolean>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const id = window.setTimeout(() => resolve(false), ms);
+    promise
+      .then((value) => {
+        window.clearTimeout(id);
+        resolve(value);
+      })
+      .catch(() => {
+        window.clearTimeout(id);
+        resolve(false);
+      });
+  });
 }
