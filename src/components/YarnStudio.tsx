@@ -111,12 +111,6 @@ export default function YarnStudio() {
       style={{ fontFamily: "var(--font-geist-sans)", color: "#3b3228" }}
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm mb-4" style={{ color: "#6d5c4c" }}>
-          Pick a source or drop your own image. When the hoop looks right, copy
-          it for your agent or paste an embed on a site. Site fabric sews the
-          stitches into the page weave.
-        </p>
-
         <div
           className={siteGround ? "-mx-2 sm:mx-0 px-2 py-8 bg-linen" : undefined}
         >
