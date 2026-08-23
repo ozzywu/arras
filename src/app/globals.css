@@ -1,21 +1,23 @@
 @import "tailwindcss";
 
 :root {
+  --app: #f2f2f7;
+  --card: #ffffff;
+  --ink: #111111;
+  --muted: #717171;
+  --line: #ebebeb;
+  --well: #f2f2f2;
   --linen: #f3efe6;
-  --umber: #3b3228;
-  --dust: #6d5c4c;
-  --flax: #8a6d55;
-  --cream: #f7f1e6;
 }
 
 @theme inline {
-  --color-linen: var(--linen);
-  --color-umber: var(--umber);
-  --color-dust: var(--dust);
-  --color-flax: var(--flax);
-  --font-serif: var(--font-cormorant);
+  --color-app: var(--app);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-well: var(--well);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-space-mono);
 }
 
 @layer base {
@@ -29,28 +31,123 @@
 html,
 body {
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 body {
-  color: var(--umber);
-  background: var(--linen);
+  color: var(--ink);
+  background: var(--app);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: #d7c4a8;
-  color: var(--umber);
+  background: #111111;
+  color: #ffffff;
 }
 
-.bg-linen {
-  background-color: #f3efe6;
-  background-image: url("/textures/linen.svg");
-  background-repeat: repeat;
-  background-size: 192px 192px;
+.studio button {
+  cursor: pointer;
+  font-family: inherit;
+  background: none;
+  border: none;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .bg-linen {
-    background-attachment: fixed;
+.studio button:focus-visible,
+.studio input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.studio button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.loom-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 24px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.loom-range::-webkit-slider-runnable-track {
+  height: 3px;
+  background: #d4d4d4;
+  border-radius: 99px;
+}
+
+.loom-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7.5px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+.loom-range::-moz-range-track {
+  height: 3px;
+  background: #d4d4d4;
+  border: none;
+  border-radius: 99px;
+}
+
+.loom-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+.loom-range-light::-webkit-slider-runnable-track {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.loom-range-light::-webkit-slider-thumb {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.loom-range-light::-moz-range-track {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.loom-range-light::-moz-range-thumb {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.thumb-row {
+  scrollbar-width: none;
+}
+
+.thumb-row::-webkit-scrollbar {
+  display: none;
+}
+
+.sheet-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.preview-frame {
+  --preview-aspect: 0.82;
+  width: min(100%, 620px, calc((56dvh - 3.5rem) * var(--preview-aspect)));
+}
+
+.preview-stage {
+  width: 100%;
+  aspect-ratio: var(--preview-aspect);
+}
+
+@media (min-width: 1024px) {
+  .preview-frame {
+    width: min(100%, 620px, calc((78vh - 3.5rem) * var(--preview-aspect)));
   }
 }
