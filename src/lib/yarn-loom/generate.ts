@@ -1,4 +1,4 @@
-import { resolveThreadColor, rgbAt } from "./color";
+import { darken, lighten, resolveThreadColor, rgbAt } from "./color";
 import { sampleAngle, sampleMag } from "./analyze";
 import { createRng } from "./rng";
 import { subjectScore } from "./subject";
@@ -24,10 +24,49 @@ function occupancyIndex(
   return Math.min(cap - 1, iy * occW + ix);
 }
 
+function foldPi(a: number): number {
+  let t = a % Math.PI;
+  if (t < 0) t += Math.PI;
+  return t;
+}
+
+/** Snap an unwrapped heading onto an undirected grain (0..π). */
+function snapUndirected(a: number, targetFolded: number): number {
+  let best = targetFolded;
+  let bestD = Infinity;
+  for (let k = -2; k <= 2; k++) {
+    const cand = targetFolded + k * Math.PI;
+    const d = Math.abs(cand - a);
+    if (d < bestD) {
+      bestD = d;
+      best = cand;
+    }
+  }
+  return best;
+}
+
+function quantizeFolded(a: number, bins: number): number {
+  const step = Math.PI / bins;
+  return foldPi(Math.round(foldPi(a) / step) * step);
+}
+
 /**
- * Trace edge-tangent streamlines and chop them into discrete satin stitches
- * that seat into the weave. Occupancy still prevents a plastic fill, but high
- * density is allowed to pack like real long-and-short satin.
+ * Quiet fields lie as tapestry weft; stronger edges lock to a satin grain
+ * so neighboring stitches share a direction instead of crawling like insects.
+ */
+function layAngle(a: number, mag: number, maxMag: number): number {
+  const magN = mag / maxMag;
+  if (magN < 0.12) {
+    return a + (snapUndirected(a, 0) - a) * 0.86;
+  }
+  const grain = snapUndirected(a, quantizeFolded(a, 8));
+  const mix = magN > 0.45 ? 0.58 : 0.76;
+  return a + (grain - a) * mix;
+}
+
+/**
+ * Long-and-short satin along edges, gobelin/weft in the fields.
+ * Occupancy still stops a plastic flood, but stitches nest like real floss.
  */
 export function generateStitches(
   analysis: Analysis,
@@ -36,20 +75,20 @@ export function generateStitches(
   const { density, stitchLength, colorMode, seed, seat = "hessian" } = options;
   const rng = createRng(seed);
   const { width: w, height: h, mag } = analysis;
-  const cell = Math.max(1.05, stitchLength * (0.52 - density * 0.34));
+  const cell = Math.max(0.92, stitchLength * (0.46 - density * 0.3));
   const occW = Math.ceil(w / cell);
-  const occH = Math.ceil(h / cell);
-  const occ = new Uint8Array(occW * occH);
+  const occ = new Uint8Array(occW * Math.ceil(h / cell));
   const occCap = occ.length;
-  const occLimit = density >= 0.9 ? 5 : density >= 0.75 ? 4 : density >= 0.55 ? 3 : 2;
-  const busyReject = density >= 0.9 ? 0.78 : density >= 0.75 ? 0.62 : 0.45;
+  const occLimit = density >= 0.9 ? 6 : density >= 0.75 ? 5 : density >= 0.55 ? 3 : 2;
+  const busyReject = density >= 0.9 ? 0.9 : density >= 0.75 ? 0.72 : 0.5;
 
   const maxMag = mag.reduce((m, v) => (v > m ? v : m), 0.0001);
   const stride = Math.max(1, Math.round(4.4 - density * 3.4));
   const stitches: Stitch[] = [];
   let passage = 0;
-  const lenScale = 1.12 - density * 0.32;
-  const diveEvery = density >= 0.85 ? 16 + ((rng() * 6) | 0) : 5 + ((rng() * 4) | 0);
+  const lenScale = 1.18 - density * 0.14;
+  const diveEvery =
+    density >= 0.85 ? 48 + ((rng() * 16) | 0) : 8 + ((rng() * 6) | 0);
   const cap = Math.round(62000 + density * 68000);
 
   const tryMark = (x0: number, y0: number, x1: number, y1: number): boolean => {
@@ -84,6 +123,7 @@ export function generateStitches(
     x1: number,
     y1: number,
     indexInPassage: number,
+    weight: number,
   ): boolean => {
     if (!tryMark(x0, y0, x1, y1)) return false;
     const mx = ((x0 + x1) / 2) | 0;
@@ -94,18 +134,21 @@ export function generateStitches(
       Math.max(0, Math.min(w - 1, mx)),
       Math.max(0, Math.min(h - 1, my)),
     );
+    const thread = resolveThreadColor(sampled, colorMode, seat);
+    const heather = (rng() - 0.5) * 0.07;
     stitches.push({
       x0,
       y0,
       x1,
       y1,
-      color: resolveThreadColor(sampled, colorMode, seat),
+      color:
+        heather >= 0 ? lighten(thread, heather) : darken(thread, -heather),
       subject: subjectScore(sampled),
       passage,
       indexInPassage,
       birth: 0,
       grow: 0.012,
-      weight: 1,
+      weight,
     });
     return true;
   };
@@ -116,7 +159,11 @@ export function generateStitches(
     for (const dir of [1, -1] as const) {
       let x = sx;
       let y = sy;
-      let prevA = sampleAngle(analysis, x, y);
+      let prevA = layAngle(
+        sampleAngle(analysis, x, y),
+        sampleMag(analysis, x, y),
+        maxMag,
+      );
       const local: { x: number; y: number }[] = [];
       for (let step = 0; step < maxSteps; step++) {
         let a = sampleAngle(analysis, x, y);
@@ -129,9 +176,10 @@ export function generateStitches(
           a += Math.PI;
           da = a - prevA;
         }
-        prevA = a;
         const m = sampleMag(analysis, x, y);
-        const stepLen = 1.35 + (1 - Math.min(1, m / maxMag)) * 0.5;
+        a = layAngle(a, m, maxMag);
+        prevA = a;
+        const stepLen = 1.2 + (1 - Math.min(1, m / maxMag)) * 0.35;
         x += Math.cos(a) * stepLen * dir;
         y += Math.sin(a) * stepLen * dir;
         if (x < 2 || y < 2 || x >= w - 2 || y >= h - 2) break;
@@ -154,7 +202,7 @@ export function generateStitches(
       const p = points[i];
       const d = Math.hypot(p.x - last.x, p.y - last.y);
       acc += d;
-      const target = lenJitter * (0.78 + rng() * 0.4);
+      const target = lenJitter * (0.92 + rng() * 0.28);
       if (acc >= target) {
         sinceDive++;
         if (sinceDive >= diveEvery) {
@@ -163,7 +211,20 @@ export function generateStitches(
           acc = 0;
           continue;
         }
-        if (pushStitch(last.x, last.y, p.x, p.y, indexInPassage)) {
+        const dx = p.x - last.x;
+        const dy = p.y - last.y;
+        const ox = dx * 0.07;
+        const oy = dy * 0.07;
+        if (
+          pushStitch(
+            last.x - ox,
+            last.y - oy,
+            p.x + ox,
+            p.y + oy,
+            indexInPassage,
+            0.9 + rng() * 0.16,
+          )
+        ) {
           indexInPassage++;
         }
         last = p;
@@ -195,34 +256,35 @@ export function generateStitches(
     }
   }
 
-  const fillStride = Math.max(1, Math.round(cell * (density >= 0.92 ? 1.05 : 1.35)));
-  const fillLen = stitchLength * lenScale * 0.82;
-  const cells: { x: number; y: number; lum: number }[] = [];
-  for (let y = 3; y < h - 3; y += fillStride) {
-    for (let x = 3; x < w - 3; x += fillStride) {
+  const rowPitch = Math.max(0.88, cell * 0.78);
+  const fillLen = stitchLength * lenScale * 0.7;
+  const colPitch = Math.max(1, fillLen * 0.68);
+  for (let y = 3, row = 0; y < h - 3; y += rowPitch, row++) {
+    if (stitches.length >= cap) break;
+    const stagger = (row % 2) * fillLen * 0.42;
+    for (let x = 3 + stagger; x < w - 3; x += colPitch) {
+      if (stitches.length >= cap) break;
       const xi = Math.max(
         3,
-        Math.min(w - 4, x + (((rng() - 0.5) * fillStride) | 0)),
+        Math.min(w - 4, x + (rng() - 0.5) * colPitch * 0.18),
       );
       const yi = Math.max(
         3,
-        Math.min(h - 4, y + (((rng() - 0.5) * fillStride) | 0)),
+        Math.min(h - 4, y + (rng() - 0.5) * rowPitch * 0.2),
       );
-      if (occ[occupancyIndex(xi, yi, occW, cell, occCap)] >= Math.max(1, occLimit - 1)) {
+      if (occ[occupancyIndex(xi, yi, occW, cell, occCap)] >= occLimit) {
         continue;
       }
-      cells.push({ x: xi, y: yi, lum: analysis.lum[yi * w + xi] });
+      let a = sampleAngle(analysis, xi, yi);
+      a = layAngle(a, sampleMag(analysis, xi, yi), maxMag);
+      a += (rng() - 0.5) * 0.05;
+      const half = fillLen * (0.88 + rng() * 0.2) * 0.5;
+      const x0 = xi - Math.cos(a) * half;
+      const y0 = yi - Math.sin(a) * half;
+      const x1 = xi + Math.cos(a) * half;
+      const y1 = yi + Math.sin(a) * half;
+      if (pushStitch(x0, y0, x1, y1, 0, 0.82 + rng() * 0.16)) passage++;
     }
-  }
-  cells.sort((a, b) => b.lum - a.lum);
-  for (const c of cells) {
-    if (stitches.length >= cap) break;
-    const a = sampleAngle(analysis, c.x, c.y) + (rng() - 0.5) * 0.18;
-    const x0 = c.x - Math.cos(a) * fillLen * 0.5;
-    const y0 = c.y - Math.sin(a) * fillLen * 0.5;
-    const x1 = c.x + Math.cos(a) * fillLen * 0.5;
-    const y1 = c.y + Math.sin(a) * fillLen * 0.5;
-    if (pushStitch(x0, y0, x1, y1, 0)) passage++;
   }
 
   return stitches;
