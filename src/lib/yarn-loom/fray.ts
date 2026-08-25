@@ -6,9 +6,16 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-/** Extra canvas margin so overshooting threads are not clipped. */
+/**
+ * Extra canvas margin so overshooting threads are not clipped.
+ *
+ * Hessian/linen patches keep this pad *inside* the cloth rectangle.
+ * Site fabric keeps the layout snug to the subject; YarnHoop paints
+ * this pad in overflow so fray can sit on the page, not in a gutter.
+ */
 export function frayPad(fray: number, ground: GroundMode): number {
-  const bleed = ground === "site" ? 40 : 0;
+  // A few analysis-px covers floss shadow that extends past endpoints.
+  const bleed = ground === "site" ? 4 : 0;
   return Math.round(bleed + fray * 56);
 }
 

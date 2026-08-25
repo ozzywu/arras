@@ -2,6 +2,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -30,7 +31,6 @@ import {
   type WeaveParams,
 } from "@/lib/yarn-loom";
 import { LINEN, type LoomParams } from "@/lib/yarn-loom/types";
-import { Badge } from "@/components/ui/badge";
 
 /** Desktop hoop width. Floss is tuned here; phones scale thickness to match. */
 export const HOOP_MAX_WIDTH = 620;
@@ -51,7 +51,11 @@ type YarnHoopProps = {
   recipe: ArrasRecipe;
   /** Overrides `recipe.src` — used for blob uploads. */
   src?: string | null;
-  t: number;
+  /**
+   * Playhead 0–1. Omit it and the hoop weaves, then plays on its own
+   * (the copy-for-agent drop-in). Studio/embed pass a controlled value.
+   */
+  t?: number;
   className?: string;
   /** Fill the parent instead of capping at HOOP_MAX_WIDTH (embed iframe). */
   fillParent?: boolean;
@@ -133,6 +137,9 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
 
     const pad = frayPad(params.fray, params.ground);
     const siteGround = params.ground === "site";
+    const controlled = t !== undefined;
+    const autoPlay = useYarnPlayhead(params.durationMs, { listenKeys: false });
+    const playhead = t ?? autoPlay.t;
 
     const genKey = [
       recipe.source,
@@ -236,10 +243,31 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedGenKey]);
 
+    useEffect(() => {
+      if (controlled) return;
+      if (busy) {
+        autoPlay.setPlaying(false);
+        autoPlay.setT(0);
+        return;
+      }
+      if (packed) autoPlay.begin();
+      // begin/setPlaying/setT are stable; do not depend on the playhead object
+      // or every animation frame would re-enter this effect.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [busy, packed, controlled]);
+
     const size = useHoopSize(
       hoopRef,
-      (analysisSize.w + pad * 2) / (analysisSize.h + pad * 2),
+      siteGround
+        ? analysisSize.w / analysisSize.h
+        : (analysisSize.w + pad * 2) / (analysisSize.h + pad * 2),
     );
+    const overflowX =
+      siteGround && analysisSize.w > 0 ? (pad * size.w) / analysisSize.w : 0;
+    const overflowY =
+      siteGround && analysisSize.h > 0 ? (pad * size.h) / analysisSize.h : 0;
+    const drawW = size.w + overflowX * 2;
+    const drawH = size.h + overflowY * 2;
 
     useEffect(() => {
       const dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -248,21 +276,21 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
         stitchRef.current,
         liveRef.current,
       ]) {
-        if (!canvas || size.w === 0) continue;
-        canvas.width = Math.round(size.w * dpr);
-        canvas.height = Math.round(size.h * dpr);
+        if (!canvas || drawW === 0) continue;
+        canvas.width = Math.round(drawW * dpr);
+        canvas.height = Math.round(drawH * dpr);
         const ctx = canvas.getContext("2d")!;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
       lastEasedRef.current = -1;
-      if (clothRef.current && size.w > 0) {
+      if (clothRef.current && drawW > 0) {
         const ctx = clothRef.current.getContext("2d")!;
-        ctx.clearRect(0, 0, size.w, size.h);
+        ctx.clearRect(0, 0, drawW, drawH);
         if (params.ground !== "site") {
-          paintCloth(ctx, size.w, size.h, params.seed, params.ground);
+          paintCloth(ctx, drawW, drawH, params.seed, params.ground);
         }
       }
-    }, [size.h, size.w, params.seed, params.ground]);
+    }, [drawH, drawW, params.seed, params.ground]);
 
     useEffect(() => {
       lastEasedRef.current = -1;
@@ -272,14 +300,14 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
     useEffect(() => {
       const canvas = stitchRef.current;
       const live = liveRef.current;
-      if (!canvas || !live || size.w === 0 || !packed) return;
+      if (!canvas || !live || drawW === 0 || !packed) return;
       const ctx = canvas.getContext("2d")!;
       const liveCtx = live.getContext("2d")!;
-      const eased = playheadEase(t);
+      const eased = playheadEase(playhead);
       const totalW = analysisSize.w + pad * 2;
       const totalH = analysisSize.h + pad * 2;
-      const sx = size.w / totalW;
-      const sy = size.h / totalH;
+      const sx = drawW / totalW;
+      const sy = drawH / totalH;
       const visualScale = size.w / HOOP_MAX_WIDTH;
       const last = lastEasedRef.current;
       const completeEnd = completeBound(packed, eased);
@@ -305,7 +333,7 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
       };
 
       if (scrubbedBack || restyle) {
-        ctx.clearRect(0, 0, size.w, size.h);
+        ctx.clearRect(0, 0, drawW, drawH);
         strokeDone(0, completeEnd);
         lastCompleteRef.current = completeEnd;
       } else if (completeEnd > lastCompleteRef.current) {
@@ -313,7 +341,7 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
         lastCompleteRef.current = completeEnd;
       }
 
-      liveCtx.clearRect(0, 0, size.w, size.h);
+      liveCtx.clearRect(0, 0, drawW, drawH);
       const growing = birthWindow(packed, eased);
       for (let k = growing.start; k < growing.end; k++) {
         const i = packed.byBirth[k];
@@ -333,23 +361,25 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
           visualScale,
         );
       }
-      if (eased < 0.98) {
+      if (interactive && eased < 0.98) {
         const needles = collectPackedNeedles(packed, eased);
         for (const n of needles) {
           drawNeedle(liveCtx, n, sx, sy, pad, pad, visualScale);
         }
       }
-      drawMotes(liveCtx, size.w, size.h, eased);
+      if (interactive) drawMotes(liveCtx, drawW, drawH, eased);
       lastEasedRef.current = eased;
     }, [
       analysisSize.h,
       analysisSize.w,
+      drawH,
+      drawW,
+      interactive,
       packed,
       params.lightAngle,
       params.thickness,
-      size.h,
+      playhead,
       size.w,
-      t,
       pad,
     ]);
 
@@ -364,11 +394,14 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
     return (
       <div
         ref={hoopRef}
-        className={`relative mx-auto${siteGround ? " bg-linen" : ""}${className ? ` ${className}` : ""}`}
+        className={`relative mx-auto${className ? ` ${className}` : ""}`}
+        aria-busy={busy}
         style={{
           width: "100%",
           maxWidth: fillParent ? "100%" : HOOP_MAX_WIDTH,
-          aspectRatio: `${analysisSize.w + pad * 2} / ${analysisSize.h + pad * 2}`,
+          aspectRatio: siteGround
+            ? `${analysisSize.w} / ${analysisSize.h}`
+            : `${analysisSize.w + pad * 2} / ${analysisSize.h + pad * 2}`,
           overflow: params.fray > 0.04 || siteGround ? "visible" : "hidden",
           ...(siteGround
             ? { boxShadow: "none", borderRadius: 0 }
@@ -399,13 +432,25 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
             : undefined
         }
       >
-        <div className="absolute inset-0 origin-center">
+        <div
+          className="absolute origin-center"
+          style={
+            siteGround
+              ? {
+                  top: -overflowY,
+                  right: -overflowX,
+                  bottom: -overflowY,
+                  left: -overflowX,
+                }
+              : { inset: 0 }
+          }
+        >
           <canvas ref={clothRef} className="absolute inset-0 h-full w-full" />
           <canvas ref={stitchRef} className="absolute inset-0 h-full w-full" />
           <canvas ref={liveRef} className="absolute inset-0 h-full w-full" />
         </div>
 
-        {(busy || dropOver) && (
+        {interactive && (busy || dropOver) && (
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
@@ -416,12 +461,9 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
                 : "transparent",
             }}
           >
-            <Badge
-              variant="secondary"
-              className="h-auto rounded-md px-3 py-1.5 font-heading text-sm font-normal tracking-wide text-foreground"
-            >
+            <p className="rounded-md bg-secondary px-3 py-1.5 font-heading text-sm tracking-wide text-foreground">
               {dropOver ? "Drop image onto the linen" : "Threading the needle…"}
-            </Badge>
+            </p>
           </div>
         )}
       </div>
@@ -431,7 +473,10 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
 
 YarnHoop.displayName = "YarnHoop";
 
-export function useYarnPlayhead(durationMs: number) {
+export function useYarnPlayhead(
+  durationMs: number,
+  { listenKeys = true }: { listenKeys?: boolean } = {},
+) {
   const [playing, setPlaying] = useState(false);
   const [t, setT] = useState(0);
   const playingRef = useRef(false);
@@ -446,6 +491,7 @@ export function useYarnPlayhead(durationMs: number) {
   }, [t]);
 
   useEffect(() => {
+    if (!listenKeys) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       if (e.code === "Space") {
@@ -455,7 +501,7 @@ export function useYarnPlayhead(durationMs: number) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [listenKeys]);
 
   useEffect(() => {
     if (!playing) {
@@ -480,14 +526,14 @@ export function useYarnPlayhead(durationMs: number) {
     return () => cancelAnimationFrame(raf);
   }, [playing, durationMs]);
 
-  const begin = () => {
+  const begin = useCallback(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setPlaying(false);
       setT(1);
       return;
     }
     setPlaying(true);
-  };
+  }, []);
 
   return { playing, setPlaying, t, setT, begin };
 }
