@@ -402,7 +402,7 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
           aspectRatio: siteGround
             ? `${analysisSize.w} / ${analysisSize.h}`
             : `${analysisSize.w + pad * 2} / ${analysisSize.h + pad * 2}`,
-          overflow: params.fray > 0.04 || siteGround ? "visible" : "hidden",
+          overflow: params.fray > 0.04 ? "visible" : "hidden",
           ...(siteGround
             ? { boxShadow: "none", borderRadius: 0 }
             : {
