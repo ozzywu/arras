@@ -63,8 +63,8 @@ export interface LoomParams {
 
 export const DEFAULT_LOOM_PARAMS: LoomParams = {
   density: 1,
-  stitchLength: 4.8,
-  thickness: 1.55,
+  stitchLength: 6.2,
+  thickness: 1.18,
   growth: "colonize",
   colorMode: "sampled",
   lightAngle: -0.7,

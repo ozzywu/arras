@@ -52,7 +52,7 @@ export function resolveThreadColor(
   mode: ColorMode,
   seat: "hessian" | "linen" = "hessian",
 ): Rgb {
-  let floss = saturate(sampled, 1.22);
+  let floss = saturate(sampled, 1.08);
   const lum = 0.2126 * floss.r + 0.7152 * floss.g + 0.0722 * floss.b;
   // Pale floss vanishes on both weaves. Seat it toward the cloth, not a tan sticker.
   if (lum > 168) {

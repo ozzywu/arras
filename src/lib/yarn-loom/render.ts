@@ -7,6 +7,7 @@ import {
   upperBound,
   type PackedStitches,
 } from "./pack";
+import { hashNoise } from "./subject";
 import { stitchProgress } from "./timeline";
 import type { Rgb, Stitch } from "./types";
 
@@ -35,6 +36,35 @@ export interface Needle {
 
 const tmpRgb: Rgb = { r: 0, g: 0, b: 0 };
 
+function strokeYarn(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  nx: number,
+  ny: number,
+  bow: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  if (Math.abs(bow) > 0.04) {
+    ctx.quadraticCurveTo(
+      (x0 + x1) * 0.5 + nx * bow,
+      (y0 + y1) * 0.5 + ny * bow,
+      x1,
+      y1,
+    );
+  } else {
+    ctx.lineTo(x1, y1);
+  }
+  ctx.stroke();
+}
+
+/**
+ * Laid cotton/wool: blunt ends dive into the cloth, two plies share a groove,
+ * and the sheen is matte. Round capsules with a hard spine read as insects.
+ */
 function drawFloss(
   ctx: CanvasRenderingContext2D,
   x0s: number,
@@ -59,44 +89,92 @@ function drawFloss(
   const y0 = (y0s + oy) * sy;
   const x1 = x0 + (x1s - x0s) * sx * p;
   const y1 = y0 + (y1s - y0s) * sy * p;
-  const ang = Math.atan2(y1 - y0, x1 - x0);
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.35 * vs) return;
+
+  const ang = Math.atan2(dy, dx);
   const lx = Math.cos(lightAngle);
   const ly = Math.sin(lightAngle);
   const nx = -Math.sin(ang);
   const ny = Math.cos(ang);
   const facing = nx * lx + ny * ly;
+  const wisp = weight < 0.48;
 
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  ctx.lineJoin = "miter";
+  if (wisp) {
+    ctx.lineCap = "round";
+    ctx.strokeStyle = cssRgb(color, 0.78);
+    ctx.lineWidth = Math.max(0.32 * vs, floss);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    return;
+  }
 
-  ctx.strokeStyle = "rgba(40, 28, 16, 0.32)";
-  ctx.lineWidth = floss + 0.7 * weight * vs;
-  ctx.beginPath();
-  ctx.moveTo(x0 + lx * 0.55 * vs, y0 + ly * 0.7 * vs);
-  ctx.lineTo(x1 + lx * 0.55 * vs, y1 + ly * 0.7 * vs);
-  ctx.stroke();
+  ctx.lineCap = "butt";
 
-  ctx.strokeStyle = cssRgb(darken(color, 0.18));
-  ctx.lineWidth = floss;
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
+  const sunk = 0.16 * vs;
+  ctx.strokeStyle = "rgba(46, 34, 22, 0.14)";
+  ctx.lineWidth = floss + 0.38 * vs;
+  strokeYarn(
+    ctx,
+    x0 + lx * sunk,
+    y0 + ly * sunk + 0.12 * vs,
+    x1 + lx * sunk,
+    y1 + ly * sunk + 0.12 * vs,
+    nx,
+    ny,
+    0,
+  );
+
+  const plyGap = Math.max(0.16 * vs, floss * 0.16);
+  const plyW = Math.max(0.38 * vs, floss * 0.58);
+  const twist = (hashNoise(x0s, y0s) - 0.5) * floss * 0.32;
+
+  ctx.strokeStyle = cssRgb(darken(color, 0.1));
+  ctx.lineWidth = plyW;
+  strokeYarn(
+    ctx,
+    x0 + nx * plyGap,
+    y0 + ny * plyGap,
+    x1 + nx * plyGap,
+    y1 + ny * plyGap,
+    nx,
+    ny,
+    twist,
+  );
 
   ctx.strokeStyle = cssRgb(color);
-  ctx.lineWidth = Math.max(0.45 * vs, floss * 0.72);
-  ctx.beginPath();
-  ctx.moveTo(x0 - nx * 0.25 * vs, y0 - ny * 0.25 * vs);
-  ctx.lineTo(x1 - nx * 0.25 * vs, y1 - ny * 0.25 * vs);
-  ctx.stroke();
+  ctx.lineWidth = plyW;
+  strokeYarn(
+    ctx,
+    x0 - nx * plyGap * 0.85,
+    y0 - ny * plyGap * 0.85,
+    x1 - nx * plyGap * 0.85,
+    y1 - ny * plyGap * 0.85,
+    nx,
+    ny,
+    -twist,
+  );
 
-  if (facing > 0.05 && weight > 0.45) {
-    ctx.strokeStyle = cssRgb(lighten(color, 0.45), 0.55 + facing * 0.3);
-    ctx.lineWidth = Math.max(0.35 * vs, floss * 0.28);
-    ctx.beginPath();
-    ctx.moveTo(x0 - nx * 0.45 * vs, y0 - ny * 0.45 * vs);
-    ctx.lineTo(x1 - nx * 0.45 * vs, y1 - ny * 0.45 * vs);
-    ctx.stroke();
+  if (facing > 0.1 && weight > 0.55) {
+    ctx.strokeStyle = cssRgb(lighten(color, 0.22), 0.18 + facing * 0.16);
+    ctx.lineWidth = Math.max(0.26 * vs, plyW * 0.36);
+    const hx = -nx * (plyGap * 0.85 + 0.08 * vs);
+    const hy = -ny * (plyGap * 0.85 + 0.08 * vs);
+    strokeYarn(
+      ctx,
+      x0 + hx,
+      y0 + hy,
+      x1 + hx,
+      y1 + hy,
+      nx,
+      ny,
+      -twist * 0.45,
+    );
   }
 }
 
