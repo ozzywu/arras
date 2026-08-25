@@ -110,7 +110,7 @@ export function parseRecipe(search: URLSearchParams): ArrasRecipe {
     durationMs: num(
       search.get("dur"),
       DEFAULT_LOOM_PARAMS.durationMs,
-      4000,
+      1000,
       28000,
     ),
     seed: Math.round(num(search.get("seed"), DEFAULT_LOOM_PARAMS.seed, 0, 1e9)),

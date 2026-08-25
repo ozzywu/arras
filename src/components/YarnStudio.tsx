@@ -403,7 +403,7 @@ export default function YarnStudio() {
 
             <ParamSlider
               label="Duration"
-              min={4000}
+              min={1000}
               max={28000}
               step={250}
               value={params.durationMs}
