@@ -25,6 +25,7 @@ import {
   paintDemoSource,
   paintSourceFromImage,
   playheadEase,
+  isLoomSuperseded,
   type ArrasRecipe,
   type PackedStitches,
   type WeaveParams,
@@ -134,9 +135,9 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
     const pad = frayPad(params.fray, params.ground);
     const siteGround = params.ground === "site";
 
+    const sourceKey = `${recipe.source}|${imageUrl ?? ""}`;
     const genKey = [
-      recipe.source,
-      imageUrl ?? "",
+      sourceKey,
       params.density,
       params.stitchLength,
       params.colorMode,
@@ -148,9 +149,32 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
     const [debouncedGenKey, setDebouncedGenKey] = useState(genKey);
 
     useEffect(() => {
-      const id = window.setTimeout(() => setDebouncedGenKey(genKey), 90);
+      const id = window.setTimeout(() => setDebouncedGenKey(genKey), 140);
       return () => window.clearTimeout(id);
     }, [genKey]);
+
+    // A new picture should blank the hoop so we do not flash the previous
+    // subject. Knob retunes keep the last packed frame until the next weave.
+    const prevSourceKeyRef = useRef(sourceKey);
+    useEffect(() => {
+      if (prevSourceKeyRef.current === sourceKey) return;
+      prevSourceKeyRef.current = sourceKey;
+      setPacked(null);
+      setBusy(true);
+      lastEasedRef.current = -1;
+      lastCompleteRef.current = 0;
+      clearCanvas(stitchRef.current);
+      clearCanvas(liveRef.current);
+      statsRef.current?.({
+        busy: true,
+        stitchCount: 0,
+        passages: 0,
+        width: analysisSize.w,
+        height: analysisSize.h,
+      });
+      // analysisSize is display-only here; do not retrigger on hoop resize.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sourceKey]);
 
     useEffect(() => {
       const loom = new LoomClient();
@@ -192,24 +216,21 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
           let next: PackedStitches;
           if (loom) {
             if (recipe.source === "courtyard" || !imageUrl) {
-              next = await loom.weaveCourtyard(weave);
+              next = await loom.weaveCourtyard(sourceKey, weave);
             } else {
-              const img = await loadImage(imageUrl);
-              if (cancelled) return;
-              const bitmap = await createImageBitmap(img);
-              if (cancelled) {
-                bitmap.close();
-                return;
-              }
-              next = await loom.weaveBitmap(bitmap, weave);
+              const url = imageUrl;
+              next = await loom.weaveImage(sourceKey, weave, async () => {
+                const img = await loadImage(url);
+                return createImageBitmap(img);
+              });
             }
           } else {
             next = await weaveOnMain(recipe, imageUrl);
           }
           if (cancelled) return;
           applyPacked(next);
-        } catch {
-          if (cancelled) return;
+        } catch (error) {
+          if (cancelled || isLoomSuperseded(error)) return;
           try {
             const next = await weaveOnMain(recipe, imageUrl);
             if (cancelled) return;
@@ -405,7 +426,7 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
           <canvas ref={liveRef} className="absolute inset-0 h-full w-full" />
         </div>
 
-        {(busy || dropOver) && (
+        {(dropOver || (busy && !packed)) && (
           <div
             className="absolute inset-0 flex items-center justify-center"
             style={{
@@ -489,7 +510,12 @@ export function useYarnPlayhead(durationMs: number) {
     setPlaying(true);
   };
 
-  return { playing, setPlaying, t, setT, begin };
+  const showComplete = () => {
+    setPlaying(false);
+    setT(1);
+  };
+
+  return { playing, setPlaying, t, setT, begin, showComplete };
 }
 
 function useHoopSize(
@@ -524,6 +550,16 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Could not load image"));
     img.src = url;
   });
+}
+
+function clearCanvas(canvas: HTMLCanvasElement | null) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
 }
 
 async function captureCanvases(

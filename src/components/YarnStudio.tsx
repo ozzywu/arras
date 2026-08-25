@@ -80,6 +80,13 @@ const EDGE_PRESETS: { label: string; value: number }[] = [
   { label: "Unravelled", value: 0.86 },
 ];
 
+/** Playback-only knobs restyle the current frame; they do not re-thread. */
+const PLAYBACK_KEYS = new Set<keyof LoomParams>([
+  "thickness",
+  "lightAngle",
+  "durationMs",
+]);
+
 export default function YarnStudio() {
   const searchParams = useSearchParams();
   const [boot] = useState(() => parseRecipe(searchParams));
@@ -99,6 +106,9 @@ export default function YarnStudio() {
   });
 
   const play = useYarnPlayhead(params.durationMs);
+  // First load and a new picture play the stitch animation. Knob retunes
+  // snap to the finished cloth so dragging a slider is not a replay.
+  const playOnReadyRef = useRef(true);
   const recipe = useMemo(
     () => recipeOf(params, source, imageUrl),
     [params, source, imageUrl],
@@ -112,10 +122,22 @@ export default function YarnStudio() {
     }
   }, [recipe]);
 
+  const playNextWeave = () => {
+    playOnReadyRef.current = true;
+    play.setPlaying(false);
+    play.setT(0);
+  };
+
+  const previewComplete = () => {
+    playOnReadyRef.current = false;
+    play.showComplete();
+  };
+
   const onFiles = (files: FileList | null) => {
     const file = files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
     const url = URL.createObjectURL(file);
+    playNextWeave();
     setImageUrl((prev) => {
       if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
       return url;
@@ -124,6 +146,7 @@ export default function YarnStudio() {
   };
 
   const patch = <K extends keyof LoomParams>(key: K, value: LoomParams[K]) => {
+    if (!PLAYBACK_KEYS.has(key)) previewComplete();
     setParams((p) => ({ ...p, [key]: value }));
   };
 
@@ -147,12 +170,15 @@ export default function YarnStudio() {
             onFiles={onFiles}
             onStats={(next) => {
               setStats(next);
-              if (next.busy) {
+              if (next.busy && playOnReadyRef.current) {
                 play.setPlaying(false);
                 play.setT(0);
               }
             }}
-            onReady={play.begin}
+            onReady={() => {
+              if (playOnReadyRef.current) play.begin();
+              else play.showComplete();
+            }}
           />
         </div>
       </div>
@@ -195,6 +221,7 @@ export default function YarnStudio() {
                     if (!value) return;
                     const preset = SOURCE_PRESETS.find((p) => p.id === value);
                     if (!preset) return;
+                    playNextWeave();
                     setSource(preset.id);
                     setImageUrl(preset.url);
                   }}
@@ -405,10 +432,14 @@ export default function YarnStudio() {
           </CardContent>
 
           <CardFooter className="flex-col items-stretch gap-3">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Tweaks jump to the finished cloth. Replay to watch it stitch.
+            </p>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
                 className="flex-1"
+                disabled={stats.busy}
                 onClick={() => {
                   if (play.t >= 1) {
                     play.setT(0);
@@ -428,6 +459,7 @@ export default function YarnStudio() {
               <Button
                 type="button"
                 variant="outline"
+                disabled={stats.busy}
                 onClick={() => {
                   play.setT(0);
                   play.setPlaying(true);
@@ -443,6 +475,7 @@ export default function YarnStudio() {
               max={1}
               step={0.001}
               value={[play.t]}
+              disabled={stats.busy}
               onValueChange={([value]) => {
                 play.setPlaying(false);
                 play.setT(value);

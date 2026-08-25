@@ -4,7 +4,7 @@ import { generateStitches } from "./generate";
 import { packStitches, type PackedStitches } from "./pack";
 import { paintCourtyard } from "./paint-demo";
 import { assignBirths } from "./timeline";
-import type { LoomParams } from "./types";
+import type { Analysis, LoomParams, Stitch } from "./types";
 
 /** Weave-relevant slice of loom params — playback fields stay on the main thread. */
 export type WeaveParams = Pick<
@@ -12,18 +12,26 @@ export type WeaveParams = Pick<
   "density" | "stitchLength" | "colorMode" | "growth" | "seed" | "ground" | "fray"
 >;
 
-export function weaveFromImageData(
-  imageData: ImageData,
+/** Params that force a new stitch set. Growth and fray reuse this cache. */
+export function generateCacheKey(params: WeaveParams): string {
+  const seat = params.ground === "hessian" ? "hessian" : "linen";
+  return `${params.density}|${params.stitchLength}|${params.colorMode}|${params.seed}|${seat}`;
+}
+
+export function weaveFromAnalysis(
+  analysis: Analysis,
   params: WeaveParams,
-): PackedStitches {
-  const analysis = analyzeImageData(imageData);
-  const stitches = generateStitches(analysis, {
-    density: params.density,
-    stitchLength: params.stitchLength,
-    colorMode: params.colorMode,
-    seed: params.seed,
-    seat: params.ground === "hessian" ? "hessian" : "linen",
-  });
+  generated?: Stitch[],
+): { packed: PackedStitches; stitches: Stitch[] } {
+  const stitches =
+    generated ??
+    generateStitches(analysis, {
+      density: params.density,
+      stitchLength: params.stitchLength,
+      colorMode: params.colorMode,
+      seed: params.seed,
+      seat: params.ground === "hessian" ? "hessian" : "linen",
+    });
   const finished = applyFray(
     stitches,
     analysis.width,
@@ -37,7 +45,17 @@ export function weaveFromImageData(
     analysis.width,
     analysis.height,
   );
-  return packStitches(born, analysis.width, analysis.height);
+  return {
+    packed: packStitches(born, analysis.width, analysis.height),
+    stitches,
+  };
+}
+
+export function weaveFromImageData(
+  imageData: ImageData,
+  params: WeaveParams,
+): PackedStitches {
+  return weaveFromAnalysis(analyzeImageData(imageData), params).packed;
 }
 
 export function rasterizeBitmap(
