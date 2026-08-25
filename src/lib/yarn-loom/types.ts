@@ -40,6 +40,8 @@ export interface Analysis {
   mag: Float32Array;
   angle: Float32Array;
   color: Uint8ClampedArray;
+  /** Peak Sobel magnitude; reused so generate does not scan `mag` again. */
+  maxMag: number;
 }
 
 export interface LoomParams {

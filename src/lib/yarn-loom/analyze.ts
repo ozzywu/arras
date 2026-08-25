@@ -46,6 +46,11 @@ export function analyzeImageData(image: ImageData): Analysis {
     }
   }
 
+  let maxMag = 0.0001;
+  for (let i = 0; i < n; i++) {
+    if (mag[i] > maxMag) maxMag = mag[i];
+  }
+
   // Smooth tangent field (vector average, magnitude-weighted).
   const smx = new Float32Array(n);
   const smy = new Float32Array(n);
@@ -75,7 +80,7 @@ export function analyzeImageData(image: ImageData): Analysis {
     }
   }
 
-  return { width: w, height: h, lum, mag, angle, color };
+  return { width: w, height: h, lum, mag, angle, color, maxMag };
 }
 
 export function sampleAngle(a: Analysis, x: number, y: number): number {

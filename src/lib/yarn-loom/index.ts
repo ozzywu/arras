@@ -90,9 +90,9 @@ export {
 export type { Needle } from "./render";
 export { packStitches, packedProgress } from "./pack";
 export type { PackedStitches } from "./pack";
-export { weaveFromImageData } from "./weave";
+export { weaveFromImageData, generateCacheKey } from "./weave";
 export type { WeaveParams } from "./weave";
-export { LoomClient } from "./loom-client";
+export { LoomClient, isLoomSuperseded } from "./loom-client";
 export {
   parseRecipe,
   recipeOf,

@@ -82,7 +82,7 @@ export function generateStitches(
   const occLimit = density >= 0.9 ? 6 : density >= 0.75 ? 5 : density >= 0.55 ? 3 : 2;
   const busyReject = density >= 0.9 ? 0.9 : density >= 0.75 ? 0.72 : 0.5;
 
-  const maxMag = mag.reduce((m, v) => (v > m ? v : m), 0.0001);
+  const maxMag = analysis.maxMag > 0 ? analysis.maxMag : 0.0001;
   const stride = Math.max(1, Math.round(4.4 - density * 3.4));
   const stitches: Stitch[] = [];
   let passage = 0;

@@ -25,6 +25,7 @@ import {
   paintDemoSource,
   paintSourceFromImage,
   playheadEase,
+  isLoomSuperseded,
   type ArrasRecipe,
   type PackedStitches,
   type WeaveParams,
@@ -148,7 +149,7 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
     const [debouncedGenKey, setDebouncedGenKey] = useState(genKey);
 
     useEffect(() => {
-      const id = window.setTimeout(() => setDebouncedGenKey(genKey), 90);
+      const id = window.setTimeout(() => setDebouncedGenKey(genKey), 140);
       return () => window.clearTimeout(id);
     }, [genKey]);
 
@@ -215,24 +216,21 @@ export const YarnHoop = forwardRef<YarnHoopHandle, YarnHoopProps>(
           let next: PackedStitches;
           if (loom) {
             if (recipe.source === "courtyard" || !imageUrl) {
-              next = await loom.weaveCourtyard(weave);
+              next = await loom.weaveCourtyard(sourceKey, weave);
             } else {
-              const img = await loadImage(imageUrl);
-              if (cancelled) return;
-              const bitmap = await createImageBitmap(img);
-              if (cancelled) {
-                bitmap.close();
-                return;
-              }
-              next = await loom.weaveBitmap(bitmap, weave);
+              const url = imageUrl;
+              next = await loom.weaveImage(sourceKey, weave, async () => {
+                const img = await loadImage(url);
+                return createImageBitmap(img);
+              });
             }
           } else {
             next = await weaveOnMain(recipe, imageUrl);
           }
           if (cancelled) return;
           applyPacked(next);
-        } catch {
-          if (cancelled) return;
+        } catch (error) {
+          if (cancelled || isLoomSuperseded(error)) return;
           try {
             const next = await weaveOnMain(recipe, imageUrl);
             if (cancelled) return;
