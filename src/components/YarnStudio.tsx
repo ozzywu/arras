@@ -135,7 +135,7 @@ export default function YarnStudio() {
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
       <div className="min-w-0 flex-1">
-        <div className={siteGround ? "-mx-2 bg-linen px-2 py-8 sm:mx-0" : undefined}>
+        <div className={siteGround ? "bg-linen py-8" : undefined}>
           <YarnHoop
             ref={hoopRef}
             recipe={recipe}

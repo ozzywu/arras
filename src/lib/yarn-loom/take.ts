@@ -1,9 +1,9 @@
 import { recipeToQuery, SOURCE_PRESETS, type ArrasRecipe } from "./recipe";
 
 const ENGINE_FILES = [
-  "src/lib/yarn-loom/",
-  "src/components/YarnHoop.tsx",
-  "public/textures/linen.svg",
+  "`src/lib/yarn-loom/` — stitch engine. Skip `take.ts` (Arras export UI).",
+  "`src/components/YarnHoop.tsx`",
+  "`public/textures/linen.svg` — only if the page uses `.bg-linen` or a linen/hessian patch",
 ];
 
 export function recipeJson(recipe: ArrasRecipe): string {
@@ -90,8 +90,9 @@ export function agentPrompt(origin: string, recipe: ArrasRecipe): string {
 
   const groundLines = site
     ? [
-        "`ground: \"site\"` — stitches sit on **my page**, not a beige patch.",
-        "Do not paint hessian/linen behind the hoop. Put `YarnHoop` on the existing cloth (copy `.bg-linen` from Arras `src/app/globals.css` if my page has no weave yet).",
+        "`ground: \"site\"` — stitches sit on **my page**, not a beige/linen patch.",
+        "The hoop is **snug to the subject**. No inner padding, no imaginary frame, no box-shadow. Type should sit flush to the sides. Fray (if any) spills *outside* the box onto my page.",
+        "Do not paint hessian/linen behind the hoop and do not wrap it in extra padding to 'frame' it. Copy `.bg-linen` from Arras `src/app/globals.css` only if my page has no weave yet.",
         "An iframe cannot composite into the parent page. Do **not** iframe this look; inline the component.",
       ]
     : [
@@ -101,13 +102,17 @@ export function agentPrompt(origin: string, recipe: ArrasRecipe): string {
 
   return `# Drop this Arras hoop on my site
 
-I already dialed this in at ${origin || "Arras"}. Implement the **live stitch hoop** (animated satin stitches from the yarn-loom engine) — not a restyled illustration and not a static screenshot unless I ask.
+I already dialed this in at ${origin || "Arras"}. **Copy the engine, then drop \`YarnHoop\` in.** Do not reimplement satin stitches, canvas streamlines, or a CSS/SVG facsimile.
 
-Engine lives in https://github.com/ozzywu/arras (this public studio). Copy these paths into my project:
+This is a client-side stitch engine (analyze → generate → pack → canvas), not Lottie and not a CSS animation. The work is a file copy plus layout wiring — not building a loom from scratch.
 
-${ENGINE_FILES.map((f) => `- \`${f}\``).join("\n")}
+Engine lives in https://github.com/ozzywu/arras. Copy these paths:
 
-Keep the \`@/\` alias (or rewrite those imports). Client-only: no upload API, no env vars, no backend. Keep \`LoomClient\` so weaving stays off the main thread.
+${ENGINE_FILES.map((f) => `- ${f}`).join("\n")}
+
+Keep the \`@/\` alias (or rewrite those imports). Client-only: no upload API, no env vars, no backend, no shadcn. \`YarnHoop\` has no UI-kit dependency.
+
+\`LoomClient\` + \`loom.worker.ts\` keep weaving off the main thread. If my bundler chokes on \`new Worker(new URL("./loom.worker.ts", import.meta.url))\`, leave them — \`YarnHoop\` already falls back to the main thread.
 
 ## Recipe — match exactly
 
@@ -129,7 +134,7 @@ ${groundLines.map((l) => `- ${l}`).join("\n")}
 ${reactSnippet(recipe).trim()}
 \`\`\`
 
-\`YarnHoop\` already weaves, plays, and respects \`prefers-reduced-motion\`. Do not retune density, growth, fray, thickness, light, seed, or duration.
+\`YarnHoop\` weaves silently (no "Threading the needle…" badge, no flying needles, no dust motes), then plays the stitch growth. It respects \`prefers-reduced-motion\`. Omit \`t\` — the hoop owns playback. Do not retune density, growth, fray, thickness, light, seed, or duration.
 
 ## Optional hosted embed
 
@@ -141,8 +146,10 @@ ${embedSnippet(origin, recipe)}
 ${custom ? "\nCustom uploads cannot ride in the iframe URL. Inline the hoop (or use a PNG still) instead.\n" : ""}
 ## Do not
 
+- Reimplement the loom or restyle it into an illustration
+- Add a "Threading the needle…" overlay or other studio loading chrome
+- Wrap site-fabric stitches in a linen/tan sticker, or pad the box so type does not sit flush
 - Add admin, auth, or an image-upload server
-- Wrap site-fabric stitches in a tan sticker
 - Change floss scale — \`YarnHoop\` already matches desktop weight on mobile
 `;
 }
